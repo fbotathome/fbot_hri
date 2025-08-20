@@ -1,0 +1,6 @@
+audio_player_node:
+  ros__parameters:
+    mouth_gain: 5
+    chunk_size: 2048
+    stream_timeout: 10
+    playback_speed: 0.85
