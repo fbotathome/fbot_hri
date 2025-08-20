@@ -12,7 +12,7 @@
 
 **A comprehensive ROS 2 package suite for human-robot interaction featuring speech synthesis, speech recognition, head movement control with facial emotions, and display management for robot operators.**
 
-[Overview](#overview) • [Architecture](#architecture) • [Installation](#installation) • [Usage](#usage) • [fbot_hri message and services](#fbot_hri-message-and-services) • [Contributing](#contributing)
+[Overview](#overview) • [Architecture](#architecture) • [Installation](#installation) • [Usage](#usage) • [fbot_hri message and services](#fbot_hri-message-and-services) • [Commit History](#commit-history) • [available emotions](#available-emotions) • [Contributing](#contributing)
 
 </div>
 
