@@ -28,8 +28,8 @@ The system consists of four main packages:
 ```
 fbot_hri/
 ├── 📁 fbot_speech/               # Speech processing and audio interaction
-│   ├── 📁 fbot_speech_nodes/     # Core speech nodes (TTS, STT, audio player)
-│   ├── 📁 fbot_speech_scripts/   # Utility scripts for audio processing
+│   ├── 📁 fbot_speech/             # Core speech nodes (TTS, STT, audio player)
+│   ├── 📁 scripts/                 # Utility scripts for audio processing
 │   └── 📁 audios/               # Audio resources (beep, talk sounds)
 ├── 📁 fbot_head/                 # Head movement and facial emotion control
 │   ├── 📁 emotions_bridge/       # Emotion-to-hardware bridge
@@ -102,6 +102,16 @@ ros2 launch fbot_hri_bringup speech_to_text.launch.py stt_config_file:=fbot_stt_
 # Start speech recognition
 ros2 service call /fbot_speech/sr/speech_recognizer \
     fbot_speech_msgs/srv/SpeechToText "{prompt: 'Say something', lang: 'en'}"
+```
+
+### RIVA Speech Recognition (Speech-to-Text)
+```bash
+# Launch speech recognizer
+ros2 launch fbot_hri_bringup riva_recognizer.launch.py
+
+# Start speech recognition
+ros2 service call /fbot_speech/sr/asr_recognizer \
+    fbot_speech_msgs/srv/SpeechToText "{string: ['boosted', 'lm', 'words'], boost: 20, sentence: 'True'}"
 ```
 
 ### Audio Player
@@ -201,6 +211,7 @@ ros2 topic pub /display_command std_msgs/msg/String "{data: 'topic:/camera/image
 |---------|------|-------------|
 | `/fbot_speech/ss/say_something` | [`SynthesizeSpeech`](fbot_speech_msgs/srv/SynthesizeSpeech.srv) | Text-to-speech synthesis |
 | `/fbot_speech/sr/speech_recognizer` | [`SpeechToText`](fbot_speech_msgs/srv/SpeechToText.srv) | Speech-to-text recognition |
+| `/fbot_speech/sr/asr_recognizer` | [`RivaToText`](fbot_speech_msgs/srv/RivaToText.srv) | Speech-to-text recognition with RIVA ASR |
 | `/fbot_speech/ap/audio_player` | [`AudioPlayer`](fbot_speech_msgs/srv/AudioPlayer.srv) | Play audio files |
 | `/fbot_speech/ap/audio_player_by_data` | [`AudioPlayerByData`](fbot_speech_msgs/srv/AudioPlayerByData.srv) | Play audio from data |
 | `/fbot_speech/ap/audio_beep` | [`Empty`](std_srvs/srv/Empty.srv) | Play beep sound |
