@@ -33,7 +33,5 @@ setup(
     scripts=[
         os.path.join('scripts', 'wav_to_mouth.py'),
         os.path.join('scripts', 'detect_hotword.py'),
-
-
     ],
 )

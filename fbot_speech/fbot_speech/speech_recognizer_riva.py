@@ -79,6 +79,10 @@ class RivaRecognizerNode(Node):
         #playsound(TALK_AUDIO)
     
     def handleRecognition(self, req: RivaToText.Request, res: RivaToText.Response):
+        """
+        @brief Callback function for the speech recognition service.
+        This function is called when a new request is received for speech recognition
+        """
         config_service = deepcopy(self.config)
         with riva.client.audio_io.MicrophoneStream(
                                                         rate =16000,
