@@ -6,7 +6,7 @@ import riva.client
 from fbot_speech_msgs.srv import AudioPlayerByData, SynthesizeSpeech
 from fbot_speech_msgs.msg import SynthesizeSpeechMessage
 from audio_common_msgs.msg import AudioData, AudioInfo
-from fbot_speech_scripts.wav_to_mouth import WavToMouth
+from scripts.wav_to_mouth import WavToMouth
 import rclpy
 from rclpy.node import Node
 from threading import Event

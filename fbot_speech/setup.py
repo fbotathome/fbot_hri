@@ -23,19 +23,15 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'speech_synthesizer = fbot_speech_nodes.speech_synthesizer:main',
-            'speech_synthesizer_old = fbot_speech_nodes.speech_synthesizer_old:main',
-            'speech_synthesizer_ml = fbot_speech_nodes.speech_synthesizer_ml:main',
-            'speech_recognizer = fbot_speech_nodes.speech_recognizer:main',
-            'speech_recognizer_old = fbot_speech_nodes.speech_recognizer_old:main',
-            'detector_hotword_node = fbot_speech_nodes.detector_hotword_node:main',
-            'audio_player = fbot_speech_nodes.audio_player:main',
+            'speech_synthesizer = fbot_speech.speech_synthesizer:main',
+            'speech_recognizer = fbot_speech.speech_recognizer:main',
+            'detector_hotword_node = fbot_speech.detector_hotword_node:main',
+            'audio_player = fbot_speech.audio_player:main',
+            'asr_riva = fbot_speech.speech_recognizer_riva:main',
             ],
     },
     scripts=[
-        os.path.join('fbot_speech_scripts', 'wav_to_mouth.py'),
-        os.path.join('fbot_speech_scripts', 'detect_hotword.py'),
-
-
+        os.path.join('scripts', 'wav_to_mouth.py'),
+        os.path.join('scripts', 'detect_hotword.py'),
     ],
 )

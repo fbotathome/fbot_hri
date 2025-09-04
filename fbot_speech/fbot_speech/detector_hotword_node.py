@@ -4,7 +4,7 @@ from rclpy.node import Node
 import os
 import re
 from std_msgs.msg import String
-from fbot_speech_scripts.detect_hotword import DetectHotWord
+from scripts.detect_hotword import DetectHotWord
 from ament_index_python.packages import get_package_share_directory
 
 

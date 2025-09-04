@@ -1,0 +1,4 @@
+asr_riva_node:
+  ros__parameters:
+    stt_mic_timeout: 10
+    riva.url: jetson:50051
