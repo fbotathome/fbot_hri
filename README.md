@@ -92,6 +92,10 @@ ros2 service call /fbot_speech/ss/say_something \
 # Synthesize speech via topic
 ros2 topic pub /fbot_speech/ss/say_something \
     fbot_speech_msgs/msg/SynthesizeSpeechMessage "{text: 'Hello World', lang: 'en', force_stream_mode: false}"
+
+# Save synthesizer speech via service
+ros2 service call /fbot_speech/ss/save_synthesizer \
+    fbot_speech_msgs/srv/FileSynthesizer "{text: 'Hello, I am Boris!', output_file: '/save/your/file.wav'}"
 ```
 
 ### Speech Recognition (Speech-to-Text)
@@ -210,6 +214,7 @@ ros2 topic pub /display_command std_msgs/msg/String "{data: 'topic:/camera/image
 | Service | Type | Description |
 |---------|------|-------------|
 | `/fbot_speech/ss/say_something` | [`SynthesizeSpeech`](fbot_speech_msgs/srv/SynthesizeSpeech.srv) | Text-to-speech synthesis |
+| `/fbot_speech/ss/saver_synthesizer` | [`FileSynthesizer`](fbot_speech_msgs/srv/FileSynthesizer.srv) | Text-to-speech saver synthesizer |
 | `/fbot_speech/sr/speech_recognizer` | [`SpeechToText`](fbot_speech_msgs/srv/SpeechToText.srv) | Speech-to-text recognition |
 | `/fbot_speech/sr/asr_recognizer` | [`RivaToText`](fbot_speech_msgs/srv/RivaToText.srv) | Speech-to-text recognition with RIVA ASR |
 | `/fbot_speech/ap/audio_player` | [`AudioPlayer`](fbot_speech_msgs/srv/AudioPlayer.srv) | Play audio files |
