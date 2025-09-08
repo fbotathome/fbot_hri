@@ -118,25 +118,30 @@ class SpeechSynthesizerNode(WavToMouth):
         self.synthesizeSpeech(request, SynthesizeSpeech.Response())
 
     def saveSynthesizer(self, request: FileSynthesizer.Request, response: FileSynthesizer.Response):
+        """
+        @brief Save synthesized speech to a file.
+        @param request: The request object containing the text to synthesize and the output file path
+        @return: The response object indicating success or failure.
+        """
         synthesizer = SynthesizeSpeech.Request()
         synthesizer.text = request.text
         synthesizer.lang = 'en-US'
-        # try:
-        out_f = wave.open(request.output_file, 'wb')
-        out_f.setnchannels(1)
-        out_f.setsampwidth(2)
-        out_f.setframerate(self.configs['sample_rate_hz'])
-        self.synthesizeSpeech(synthesizer, SynthesizeSpeech.Response())
-        out_f.writeframes(self.resp.audio)
-        out_f.close()
-        response = FileSynthesizer.Response()
-        response.success = True
-        return response
-        # except Exception as e:
-        #     response = SynthesizeSpeech.Response()
-        #     response.success = False
-        #     self.get_logger().error(f"Error while saving file: {e}")
-        #     return response
+        try:
+            out_f = wave.open(request.output_file, 'wb')
+            out_f.setnchannels(1)
+            out_f.setsampwidth(2)
+            out_f.setframerate(self.configs['sample_rate_hz'])
+            self.synthesizeSpeech(synthesizer, SynthesizeSpeech.Response())
+            out_f.writeframes(self.resp.audio)
+            out_f.close()
+            response = FileSynthesizer.Response()
+            response.success = True
+            return response
+        except Exception as e:
+            response = SynthesizeSpeech.Response()
+            response.success = False
+            self.get_logger().error(f"Error while saving file: {e}")
+            return response
 
 
 def main(args=None):
