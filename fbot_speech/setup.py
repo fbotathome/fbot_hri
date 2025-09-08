@@ -1,5 +1,6 @@
 from setuptools import find_packages, setup
 import os
+import glob
 
 package_name = 'fbot_speech'
 
@@ -8,9 +9,10 @@ setup(
     version='0.0.0',
     packages=find_packages(exclude=['test']),
     data_files=[
-        ('share/ament_index/resource_index/packages',
-            ['resource/' + package_name]),
+        ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
+        (os.path.join('share', package_name, 'fbot_speech'), glob.glob('fbot_speech/*.py')),
+        (os.path.join('share', package_name, 'speech_plugins'), glob.glob('speech_plugins/*.py'))
     ],
     install_requires=[
         'setuptools',
@@ -28,10 +30,13 @@ setup(
             'detector_hotword_node = fbot_speech.detector_hotword_node:main',
             'audio_player = fbot_speech.audio_player:main',
             'asr_riva = fbot_speech.speech_recognizer_riva:main',
-            ],
+            ]
     },
-    scripts=[
-        os.path.join('scripts', 'wav_to_mouth.py'),
-        os.path.join('scripts', 'detect_hotword.py'),
-    ],
 )
+
+
+
+    # scripts=[
+    #     os.path.join('scripts', 'wav_to_mouth.py'),
+    #     os.path.join('scripts', 'detect_hotword.py'),
+    # ],

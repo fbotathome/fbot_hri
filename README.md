@@ -29,7 +29,7 @@ The system consists of four main packages:
 fbot_hri/
 ├── 📁 fbot_speech/               # Speech processing and audio interaction
 │   ├── 📁 fbot_speech/             # Core speech nodes (TTS, STT, audio player)
-│   ├── 📁 scripts/                 # Utility scripts for audio processing
+│   ├── 📁 speech_scripts/                 # Utility scripts for audio processing
 │   └── 📁 audios/               # Audio resources (beep, talk sounds)
 ├── 📁 fbot_head/                 # Head movement and facial emotion control
 │   ├── 📁 emotions_bridge/       # Emotion-to-hardware bridge

@@ -2,15 +2,15 @@
 # coding: utf-8
 import numpy as np
 import riva.client
+import rclpy
+import wave
 
-from fbot_speech_msgs.srv import AudioPlayerByData, SynthesizeSpeech, FileSynthesizer
+from fbot_speech_msgs.srv import SynthesizeSpeech, FileSynthesizer
 from fbot_speech_msgs.msg import SynthesizeSpeechMessage
 from audio_common_msgs.msg import AudioData, AudioInfo
-from scripts.wav_to_mouth import WavToMouth
-import rclpy
-from rclpy.node import Node
+from speech_plugins.wav_to_mouth import WavToMouth
 from threading import Event
-import wave
+
 
 class SpeechSynthesizerNode(WavToMouth):
     def __init__(self):
