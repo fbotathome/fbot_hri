@@ -3,7 +3,7 @@
 import numpy as np
 import riva.client
 
-from fbot_speech_msgs.srv import AudioPlayerByData, SynthesizeSpeech, FileSynthesize
+from fbot_speech_msgs.srv import AudioPlayerByData, SynthesizeSpeech, FileSynthesizer
 from fbot_speech_msgs.msg import SynthesizeSpeechMessage
 from audio_common_msgs.msg import AudioData, AudioInfo
 from scripts.wav_to_mouth import WavToMouth
@@ -29,7 +29,7 @@ class SpeechSynthesizerNode(WavToMouth):
         self.synthesizerSubscriber = self.create_subscription(SynthesizeSpeechMessage, self.synthesizer_subscriber_param, self.synthesizeSpeechCallback, 10)
         # Create service
         self.synthesizerService = self.create_service(SynthesizeSpeech, self.synthesizer_service_param, self.synthesizeSpeech)
-        self.saveSynthesizerService = self.create_service(FileSynthesize, self.save_synthesizer_service_param, self.saveSynthesizer) 
+        self.saveSynthesizerService = self.create_service(FileSynthesizer, self.save_synthesizer_service_param, self.saveSynthesizer) 
 
     def declareParameters(self):
         self.declare_parameter('tts_configs.language_code', 'en-US')
@@ -117,27 +117,26 @@ class SpeechSynthesizerNode(WavToMouth):
         request.lang = msg.lang
         self.synthesizeSpeech(request, SynthesizeSpeech.Response())
 
-    def saveSynthesizer(self, request: FileSynthesize.Request, response: FileSynthesize.Response):
+    def saveSynthesizer(self, request: FileSynthesizer.Request, response: FileSynthesizer.Response):
         synthesizer = SynthesizeSpeech.Request()
         synthesizer.text = request.text
-        synthesizer.lang = 'e'
-        synthesizer.force_stream_mode = 0
-        try:
-            out_f = wave.open(request.file_output, 'wb')
-            out_f.setnchannels(1)
-            out_f.setsampwidth(2)
-            out_f.setframerate(self.configs['sample_rate_hz'])
-            self.synthesizeSpeech(synthesizer, SynthesizeSpeech.Response())
-            out_f.writeframes(self.resp.audio)
-            out_f.close()
-            response = SynthesizeSpeech.Response()
-            response.success = True
-            return response
-        except Exception as e:
-            response = SynthesizeSpeech.Response()
-            response.success = False
-            self.get_logger().error(f"Error while saving file: {e}")
-            return response
+        synthesizer.lang = 'en-US'
+        # try:
+        out_f = wave.open(request.output_file, 'wb')
+        out_f.setnchannels(1)
+        out_f.setsampwidth(2)
+        out_f.setframerate(self.configs['sample_rate_hz'])
+        self.synthesizeSpeech(synthesizer, SynthesizeSpeech.Response())
+        out_f.writeframes(self.resp.audio)
+        out_f.close()
+        response = FileSynthesizer.Response()
+        response.success = True
+        return response
+        # except Exception as e:
+        #     response = SynthesizeSpeech.Response()
+        #     response.success = False
+        #     self.get_logger().error(f"Error while saving file: {e}")
+        #     return response
 
 
 def main(args=None):
