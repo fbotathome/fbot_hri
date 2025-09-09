@@ -22,10 +22,10 @@
         service: "/fbot_speech/sr/asr_recognizer"
 
       speech_sythesizer:
-        service: "/fbot_speech/ss/save_synthesizer"
+        service: "/fbot_speech/ss/say_something"
 
       save_sythesizer:
-        service: "/fbot_speech/ss/say_something"
+        service: "/fbot_speech/ss/save_synthesizer"
 
       audio_player:
         service: "/fbot_speech/ap/audio_player"
