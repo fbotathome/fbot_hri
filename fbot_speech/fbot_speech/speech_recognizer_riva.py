@@ -45,9 +45,9 @@ class RivaRecognizerNode(Node):
             self.config,
             start_history= 50,
             start_threshold= -1,
-            stop_history= 500,
+            stop_history= 1500,
             stop_history_eou= 700,
-            stop_threshold= -1.0,
+            stop_threshold= 0.6,
             stop_threshold_eou= -1.0,
         )
 
