@@ -2,14 +2,15 @@
 # coding: utf-8
 import numpy as np
 import riva.client
+import rclpy
+import wave
 
-from fbot_speech_msgs.srv import AudioPlayerByData, SynthesizeSpeech
+from fbot_speech_msgs.srv import SynthesizeSpeech, FileSynthesizer
 from fbot_speech_msgs.msg import SynthesizeSpeechMessage
 from audio_common_msgs.msg import AudioData, AudioInfo
-from scripts.wav_to_mouth import WavToMouth
-import rclpy
-from rclpy.node import Node
+from speech_plugins.wav_to_mouth import WavToMouth
 from threading import Event
+
 
 class SpeechSynthesizerNode(WavToMouth):
     def __init__(self):
@@ -27,7 +28,8 @@ class SpeechSynthesizerNode(WavToMouth):
         # Create subscriber
         self.synthesizerSubscriber = self.create_subscription(SynthesizeSpeechMessage, self.synthesizer_subscriber_param, self.synthesizeSpeechCallback, 10)
         # Create service
-        self.synthesizerService = self.create_service(SynthesizeSpeech, self.synthesizer_service_param, self.synthesizeSpeech)        
+        self.synthesizerService = self.create_service(SynthesizeSpeech, self.synthesizer_service_param, self.synthesizeSpeech)
+        self.saveSynthesizerService = self.create_service(FileSynthesizer, self.save_synthesizer_service_param, self.saveSynthesizer) 
 
     def declareParameters(self):
         self.declare_parameter('tts_configs.language_code', 'en-US')
@@ -35,12 +37,14 @@ class SpeechSynthesizerNode(WavToMouth):
         self.declare_parameter('tts_configs.voice_name', 'English-US')
         self.declare_parameter('riva.url', 'localhost:50051')
         self.declare_parameter('services.audio_player_by_data.service', '/fbot_speech/ap/audio_player_by_data')
+        self.declare_parameter('services.save_synthesizer.service', '/fbot_speech/ss/save_synthesizer')
         self.declare_parameter('services.speech_synthesizer.service', '/fbot_speech/ss/say_something')
         self.declare_parameter('subscribers.speech_synthesizer.topic', '/fbot_speech/ss/say_something')
 
     def readParameters(self):
         self.audio_player_by_data_service_param = self.get_parameter('services.audio_player_by_data.service').get_parameter_value().string_value
         self.synthesizer_service_param = self.get_parameter('services.speech_synthesizer.service').get_parameter_value().string_value
+        self.save_synthesizer_service_param = self.get_parameter('services.save_synthesizer.service').get_parameter_value().string_value
         self.synthesizer_subscriber_param = self.get_parameter('subscribers.speech_synthesizer.topic').get_parameter_value().string_value
         self.configs = {
             "language_code": self.get_parameter('tts_configs.language_code').get_parameter_value().string_value,
@@ -59,7 +63,7 @@ class SpeechSynthesizerNode(WavToMouth):
         speech = request.text
         try:
             # Call Riva TTS to synthesize the speech
-            resp = self.riva_tts.synthesize(
+            self.resp = self.riva_tts.synthesize(
                 custom_dictionary=config, 
                 text=speech,
                 voice_name=config["voice_name"], 
@@ -69,7 +73,7 @@ class SpeechSynthesizerNode(WavToMouth):
             )
             
             # Convert the response audio to a NumPy array
-            audio_samples = np.frombuffer(resp.audio, dtype=np.int16)
+            audio_samples = np.frombuffer(self.resp.audio, dtype=np.int16)
             # Prepare the audio data to send to the audio player
             audio_data = AudioData()
             audio_data.uint8_data = audio_samples.tobytes()
@@ -112,6 +116,33 @@ class SpeechSynthesizerNode(WavToMouth):
         request.text = msg.text
         request.lang = msg.lang
         self.synthesizeSpeech(request, SynthesizeSpeech.Response())
+
+    def saveSynthesizer(self, request: FileSynthesizer.Request, response: FileSynthesizer.Response):
+        """
+        @brief Save synthesized speech to a file.
+        @param request: The request object containing the text to synthesize and the output file path
+        @return: The response object indicating success or failure.
+        """
+        synthesizer = SynthesizeSpeech.Request()
+        synthesizer.text = request.text
+        synthesizer.lang = 'en-US'
+        try:
+            out_f = wave.open(request.output_file, 'wb')
+            out_f.setnchannels(1)
+            out_f.setsampwidth(2)
+            out_f.setframerate(self.configs['sample_rate_hz'])
+            self.synthesizeSpeech(synthesizer, SynthesizeSpeech.Response())
+            out_f.writeframes(self.resp.audio)
+            out_f.close()
+            response = FileSynthesizer.Response()
+            response.success = True
+            return response
+        except Exception as e:
+            response = SynthesizeSpeech.Response()
+            response.success = False
+            self.get_logger().error(f"Error while saving file: {e}")
+            return response
+
 
 def main(args=None):
     rclpy.init(args=args)

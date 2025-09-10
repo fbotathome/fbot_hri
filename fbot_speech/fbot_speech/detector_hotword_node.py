@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 import rclpy
-from rclpy.node import Node
 import os
 import re
-from std_msgs.msg import String
-from scripts.detect_hotword import DetectHotWord
-from ament_index_python.packages import get_package_share_directory
 
+from rclpy.node import Node
+from std_msgs.msg import String
+from speech_plugins.detect_hotword import DetectHotWord
+from ament_index_python.packages import get_package_share_directory
 
 class HotwordDetectorNode(Node):
     def __init__(self):
