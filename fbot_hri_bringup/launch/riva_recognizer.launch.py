@@ -34,14 +34,14 @@ def generate_launch_description():
 
     stt_config_file_path_remote = PathJoinSubstitution([
         FindPackageShareRemote(remote_install_space='/home/jetson/jetson_ws/install', package='fbot_hri_bringup'),
-        'config',
-        'asr_riva_test.yaml']
+        'config', 'riva_recognizer',
+        'asr_riva_example.yaml']
     )
 
     stt_config_file_path = PathJoinSubstitution([
         get_package_share_directory('fbot_hri_bringup'),
-        'config',
-        'asr_riva_test.yaml']
+        'config', 'riva_recognizer',
+        'asr_riva_example.yaml']
     )
 
     stt_config_file_remote_arg = DeclareLaunchArgument(
