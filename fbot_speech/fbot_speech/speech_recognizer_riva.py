@@ -43,12 +43,12 @@ class RivaRecognizerNode(Node):
 
         riva.client.add_endpoint_parameters_to_config(
             self.config,
-            start_history= 50,
-            start_threshold= -1,
-            stop_history= 500,
-            stop_history_eou= 700,
-            stop_threshold= -1.0,
-            stop_threshold_eou= -1.0,
+            start_history= self.start_history,
+            start_threshold= self.start_threshold,
+            stop_history= self.stop_history,
+            stop_history_eou= self.stop_history_eou,
+            stop_threshold= self.stop_threshold,
+            stop_threshold_eou= self.stop_threshold_eou,
         )
 
         default_device_info = riva.client.audio_io.get_default_input_device_info()
@@ -62,6 +62,12 @@ class RivaRecognizerNode(Node):
     def declareParameters(self):
         self.declare_parameter('riva.url', 'localhost:50051')
         self.declare_parameter('stt_mic_timeout', 10)
+        self.declare_parameter('stt_configs.start_history', 50)
+        self.declare_parameter('stt_configs.start_threshold', -1)
+        self.declare_parameter('stt_configs.stop_history', 3500)
+        self.declare_parameter('stt_configs.stop_history_eou', 1500)
+        self.declare_parameter('stt_configs.stop_threshold', 0.8)
+        self.declare_parameter('stt_configs.stop_threshold_eou', 0.9)
         self.declare_parameter('services.audio_player_beep.service', '/fbot_speech/ap/audio_beep')
         self.declare_parameter('services.asr_recognizer.service', '/fbot_speech/sr/asr_recognizer')
 
@@ -70,6 +76,12 @@ class RivaRecognizerNode(Node):
         self.audio_player_beep_param_service = self.get_parameter('services.audio_player_beep.service').get_parameter_value().string_value
         self.recognizer_service_param = self.get_parameter('services.asr_recognizer.service').get_parameter_value().string_value
         self.stt_mic_timeout = self.get_parameter('stt_mic_timeout').get_parameter_value().integer_value
+        self.start_history = self.get_parameter('stt_configs.start_history').get_parameter_value().integer_value
+        self.start_threshold = self.get_parameter('stt_configs.start_threshold').get_parameter_value().integer_value
+        self.stop_history = self.get_parameter('stt_configs.stop_history').get_parameter_value().integer_value
+        self.stop_history_eou = self.get_parameter('stt_configs.stop_history_eou').get_parameter_value().integer_value
+        self.stop_threshold = self.get_parameter('stt_configs.stop_threshold').get_parameter_value().double_value
+        self.stop_threshold_eou = self.get_parameter('stt_configs.stop_threshold_eou').get_parameter_value().double_value
         self.riva_url = self.get_parameter('riva.url').get_parameter_value().string_value
 
 
