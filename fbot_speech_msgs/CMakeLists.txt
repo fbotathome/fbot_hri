@@ -20,6 +20,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/SpeechToText.srv"
   "srv/RivaToText.srv"
   "srv/SynthesizeSpeech.srv"
+  "srv/FileSynthesizer.srv"
   "srv/AudioPlayer.srv"
   "srv/AudioStreamStart.srv"
   DEPENDENCIES std_msgs audio_common_msgs

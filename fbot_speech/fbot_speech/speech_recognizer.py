@@ -2,14 +2,13 @@
 # -*- coding: utf-8 -*-
 
 import rclpy
-from rclpy.node import Node
-from std_srvs.srv import Empty
-from fbot_speech_msgs.srv import SpeechToText
 import os
 import threading
 import time
-from playsound import playsound
 
+from rclpy.node import Node
+from std_srvs.srv import Empty
+from fbot_speech_msgs.srv import SpeechToText
 from RealtimeSTT import AudioToTextRecorder
 
 DEFAULT_LANGUAGE = 'en'
