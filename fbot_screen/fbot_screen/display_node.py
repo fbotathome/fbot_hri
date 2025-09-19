@@ -3,7 +3,9 @@ import cv2
 import numpy as np
 import threading
 import time
+import os
 from rclpy.node import Node
+from ament_index_python.packages import get_package_share_directory
 from std_msgs.msg import String
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
@@ -27,6 +29,8 @@ class MediaDisplayNode(Node):
         self.current_media_thread = None
         self.stop_media_flag = threading.Event()
         self.current_topic_subscriber = None
+        ws_dir = os.path.abspath(os.path.join(get_package_share_directory('fbot_screen'), '../../../..'))
+        self.file_path = os.path.join(ws_dir, "src", "fbot_hri", "fbot_screen", self.font_path)
 
         self.get_logger().info('Media Display Node started. Waiting for commands on /display_command')
     
@@ -39,7 +43,7 @@ class MediaDisplayNode(Node):
         self.declare_parameter('screen.height', 480)
         self.declare_parameter('screen.margin_x', 20)
         self.declare_parameter('screen.margin_y', 30)
-        self.declare_parameter('font.path', '/usr/share/fonts/truetype/vox/vox_regular15.ttf')
+        self.declare_parameter('font.path', '/fonts/vox_regular15.ttf')
     
     def readParameters(self):
         self.screen_width = self.get_parameter('screen.width').get_parameter_value().integer_value
