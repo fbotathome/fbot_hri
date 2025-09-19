@@ -24,6 +24,11 @@ setup(
     entry_points={
         'console_scripts': [
             'display_node = fbot_screen.display_node:main',
+            'x11vnc_node = fbot_screen.foxglove_xvnc'
         ],
     },
+    scripts = [
+        'fbot_screen/foxglove_xvnc.sh',
+    ],
+
 )
