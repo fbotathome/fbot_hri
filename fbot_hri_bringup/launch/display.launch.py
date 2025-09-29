@@ -19,7 +19,7 @@ def generate_launch_description():
     foxglove_bridge_launch = IncludeLaunchDescription(
         AnyLaunchDescriptionSource(os.path.join(get_package_share_directory('foxglove_bridge'), 'launch', 'foxglove_bridge_launch.xml')),
         launch_arguments={
-            'port': '9090'
+            'port': '8765'
         }.items())
     
     display_node = Node(

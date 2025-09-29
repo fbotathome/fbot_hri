@@ -31,7 +31,7 @@ class MediaDisplayNode(Node):
         self.current_topic_subscriber = None
         ws_dir = os.path.abspath(os.path.join(get_package_share_directory('fbot_screen'), '../../../..'))
         self.file_path = os.path.join(ws_dir, "src", "fbot_hri", "fbot_screen") + self.font_path
-
+        self.get_logger().info(f'Using font path: {self.file_path}')
         self.get_logger().info('Media Display Node started. Waiting for commands on /display_command')
     
     def initRosComm(self): 
@@ -116,9 +116,9 @@ class MediaDisplayNode(Node):
         
         for font_size in range(max_font_size, min_font_size - 1, -1):
             try:
-                font = ImageFont.truetype(self.font_path, font_size)
+                font = ImageFont.truetype(self.file_path, font_size)
             except IOError:
-                self.get_logger().error(f"Font not found at '{self.font_path}'. Check the path.")
+                self.get_logger().error(f"Font not found at '{self.file_path}'. Check the path.")
                 error_image = np.zeros((self.screen_height, self.screen_width, 3), dtype=np.uint8)
                 self.ui_publisher.publish(self.bridge.cv2_to_imgmsg(error_image, "bgr8"))
                 return
@@ -142,7 +142,7 @@ class MediaDisplayNode(Node):
                 final_lines = lines
                 break
 
-        final_font = ImageFont.truetype(self.font_path, optimal_font_size)
+        final_font = ImageFont.truetype(self.file_path, optimal_font_size)
         pil_image = PILImage.new('RGB', (self.screen_width, self.screen_height), color=(255, 255, 255))
         draw = ImageDraw.Draw(pil_image)
         line_height_approx = optimal_font_size * 1.2
