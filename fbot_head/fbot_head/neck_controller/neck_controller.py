@@ -233,10 +233,14 @@ class NeckController(Node):
         @brief Computes the neck angles required to look at a given point.
         @param point: (geometry_msgs.msg.Point) The target point.
         """
-        horizontal = math.pi + math.atan2(point.y, point.x)
+        horizontal = math.degrees(math.pi + math.atan2(point.y, point.x))
         dist = np.hypot(point.x, point.y)
-        vertical = math.pi + math.atan2(point.z, dist) #ajuste vertical 
-        return [math.degrees(horizontal), math.degrees(vertical)]
+        vertical = math.degrees(math.pi + math.atan2(point.z, dist)) #ajuste vertical
+
+        if self.sub_lookat.topic == '/fbot_vision/fr/recognition3D' or self.sub_lookat.topic == '/fbot_vision/pt/tracking3D':
+            vertical = max(180.0, vertical)
+
+        return [horizontal, vertical]
 
     def lookAtStart(self, req : LookAtDescription3D.Request, res : LookAtDescription3D.Response): 
         """
@@ -302,7 +306,7 @@ class NeckController(Node):
                 if distance < max(1.5 * delta, 1.5):
                     lookat_neck = self.computeNeckStateByPoint(ps)
                     self.last_pose = deepcopy(ps)
-                    if abs(lookat_neck[0] - self.current_angle[0] + lookat_neck[1] - self.current_angle[1]) > 1.5:
+                    if abs(lookat_neck[0] - self.current_angle[0]) + abs(lookat_neck[1] - self.current_angle[1]) > 1.5:
                         self.updateNeck(lookat_neck)
 
                 self.last_pose_time = time
