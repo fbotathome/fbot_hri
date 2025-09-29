@@ -30,7 +30,7 @@ class MediaDisplayNode(Node):
         self.stop_media_flag = threading.Event()
         self.current_topic_subscriber = None
         ws_dir = os.path.abspath(os.path.join(get_package_share_directory('fbot_screen'), '../../../..'))
-        self.file_path = os.path.join(ws_dir, "src", "fbot_hri", "fbot_screen", self.font_path)
+        self.file_path = os.path.join(ws_dir, "src", "fbot_hri", "fbot_screen") + self.font_path
 
         self.get_logger().info('Media Display Node started. Waiting for commands on /display_command')
     
@@ -43,7 +43,7 @@ class MediaDisplayNode(Node):
         self.declare_parameter('screen.height', 480)
         self.declare_parameter('screen.margin_x', 20)
         self.declare_parameter('screen.margin_y', 30)
-        self.declare_parameter('font.path', '/fonts/vox_regular15.ttf')
+        self.declare_parameter('font.path', '/fonts/vox_regular14.ttf')
     
     def readParameters(self):
         self.screen_width = self.get_parameter('screen.width').get_parameter_value().integer_value
@@ -72,8 +72,14 @@ class MediaDisplayNode(Node):
         @param msg: msg object containing the type and the command.
         """
         self.stop_current_media()
+        if msg.data == 'blank':
+            pil_image = PILImage.new('RGB', (self.screen_width, self.screen_height), color=(255, 255, 255))
+            image = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
+            self.ui_publisher.publish(self.bridge.cv2_to_imgmsg(image, "bgr8")) 
+            return
 
         parts = msg.data.split(':', 1)
+        self.get_logger().info(f'Received command: "{parts}"')
         if len(parts) != 2:
             self.get_logger().error(f'Malformed command: "{msg.data}". Use "type:value".')
             return
@@ -129,7 +135,7 @@ class MediaDisplayNode(Node):
                     lines.append(current_line)
                     current_line = word
             lines.append(current_line)
-            total_height = len(lines) * font_size * 1.2
+            total_height = len(lines) * font_size * 1.5
             
             if total_height <= (self.screen_height - 2 * self.screen_margin_y):
                 optimal_font_size = font_size
