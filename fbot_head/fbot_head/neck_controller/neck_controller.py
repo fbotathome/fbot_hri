@@ -56,7 +56,7 @@ class NeckController(Node):
         except RuntimeError as e:
             self.get_logger().error(str(e))
             return 
-
+        self.get_logger().info("NeckController initialized successfully.")
         self.pause = False
         self.lock_updateNeck = False
 
@@ -237,8 +237,9 @@ class NeckController(Node):
         dist = np.hypot(point.x, point.y)
         vertical = math.degrees(math.pi + math.atan2(point.z, dist)) #ajuste vertical
 
-        if self.sub_lookat.topic == '/fbot_vision/fr/recognition3D' or self.sub_lookat.topic == '/fbot_vision/pt/tracking3D':
-            vertical = max(180.0, vertical)
+        if self.sub_lookat:
+            if self.sub_lookat.topic == '/fbot_vision/fr/recognition3D' or self.sub_lookat.topic == '/fbot_vision/pt/tracking3D':
+                vertical = max(180.0, vertical)
 
         return [horizontal, vertical]
 
