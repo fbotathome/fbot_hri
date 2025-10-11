@@ -23,7 +23,7 @@ class EmotionsPublisher(Node):
         msg = String()
         msg.data = self.emotions[self.i]
         self.publisher_.publish(msg)
-        self.publisher_neck.publish(Float64MultiArray(data=[200.0-(self.i*5), 180.0]))
+        # self.publisher_neck.publish(Float64MultiArray(data=[200.0-(self.i*5), 180.0]))
         self.i = self.i+1 if self.i<6 else 0
 
 

@@ -25,8 +25,8 @@ def generate_launch_description():
             executable='emotions_bridge',
             name='emotions_bridge',
             parameters = [motors_config]), #emotions_config]),
-        Node(
-            package='fbot_head',
-            executable='emotions_publisher',
-            name='emotions_publisher')
+        # Node(
+        #     package='fbot_head',
+        #     executable='emotions_publisher',
+        #     name='emotions_publisher')
     ])

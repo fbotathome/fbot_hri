@@ -19,7 +19,7 @@ class EmotionsBridge(Node):
         super().__init__('emotions_bridge')
 
         try:
-            self.serial = serial.Serial('/dev/ttyUSB0')
+            self.serial = serial.Serial('/dev/ttyUSB4')
         except serial.SerialException as e:
             self.get_logger().error(f"Serial port error: {e}")
             return
