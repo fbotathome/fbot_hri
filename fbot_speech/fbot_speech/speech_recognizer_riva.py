@@ -31,7 +31,7 @@ class RivaRecognizerNode(Node):
         self.config = riva.client.StreamingRecognitionConfig(
                                                             config = riva.client.RecognitionConfig(
                                                                     encoding=riva.client.AudioEncoding.LINEAR_PCM,
-                                                                    language_code='en-US',
+                                                                    language_code='pt-BR',  # or auto
                                                                     max_alternatives=1,
                                                                     profanity_filter=False,
                                                                     enable_automatic_punctuation=False,

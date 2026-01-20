@@ -35,7 +35,7 @@ class SpeechRecognizerNode(Node):
     def declareParameters(self):
         self.declare_parameter('stt_configs.compute_type', 'float32')
         self.declare_parameter('stt_configs.spinner', False)
-        self.declare_parameter('stt_configs.model', 'small.en')
+        self.declare_parameter('stt_configs.model', 'small')
         self.declare_parameter('stt_configs.silero_sensitivity', 0.7)
         self.declare_parameter('stt_configs.device', 'cpu')
         self.declare_parameter('stt_configs.webrtc_sensitivity', 1)

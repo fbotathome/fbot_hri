@@ -32,9 +32,9 @@ class SpeechSynthesizerNode(WavToMouth):
         self.saveSynthesizerService = self.create_service(FileSynthesizer, self.save_synthesizer_service_param, self.saveSynthesizer) 
 
     def declareParameters(self):
-        self.declare_parameter('tts_configs.language_code', 'en-US')
+        self.declare_parameter('tts_configs.language_code', 'pt-BR')
         self.declare_parameter('tts_configs.sample_rate_hz', 44100)
-        self.declare_parameter('tts_configs.voice_name', 'English-US')
+        self.declare_parameter('tts_configs.voice_name', 'pt-BR') # aqui pode ser só ''
         self.declare_parameter('riva.url', 'localhost:50051')
         self.declare_parameter('services.audio_player_by_data.service', '/fbot_speech/ap/audio_player_by_data')
         self.declare_parameter('services.save_synthesizer.service', '/fbot_speech/ss/save_synthesizer')
