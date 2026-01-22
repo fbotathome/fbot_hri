@@ -6,6 +6,7 @@ import rclpy
 import serial
 from rclpy.node import Node
 from std_msgs.msg import String
+from std_srvs.srv import SetBool  # ADICIONADO: Importação para o serviço de piscagem
 from ament_index_python.packages import get_package_share_directory
 
 class EmotionsBridge(Node):
@@ -19,7 +20,7 @@ class EmotionsBridge(Node):
         super().__init__('emotions_bridge')
 
         try:
-            self.serial = serial.Serial('/dev/ttyFACE')
+            self.serial = serial.Serial('/dev/ttyFACE', 9600, timeout=1) # Mantido conforme padrão ESP32
         except serial.SerialException as e:
             self.get_logger().error(f"Serial port error: {e}")
             return
@@ -35,7 +36,40 @@ class EmotionsBridge(Node):
 
         self.sub_emotion = self.create_subscription(String, 'fbot_face/emotion', self.emotionCallback, 10)
 
+        # ADICIONADO: Serviço para ativar/desativar piscagem (CMD 3)
+        self.srv_blink = self.create_service(SetBool, 'set_blink', self.set_blink_callback)
+        self.get_logger().info("Serviço 'set_blink' (CMD 3) inicializado.")
+
         time.sleep(2)
+
+    # ADICIONADO: CALLBACK DO NOVO SERVIÇO (CMD 3)
+    def set_blink_callback(self, request, response):
+        """
+        @brief Callback para o serviço de piscagem. Envia o CMD 3 para o firmware.
+        """
+        try:
+            # Monta o JSON para o comando 3 definido no firmware
+            msg = {"cmd": 3, "blink": request.data}
+            data_str = json.dumps(msg)
+            data_bytes = data_str.encode('utf-8')
+            
+            self.serial.write(data_bytes)
+            self.get_logger().info(f'Sent blink command (CMD 3): {data_str}')
+            
+            # Aguarda a resposta de sucesso do microcontrolador
+            if self.waitSerialResponse("success"):
+                response.success = True
+                response.message = f"Piscagem definida como: {request.data}"
+            else:
+                response.success = False
+                response.message = "Microcontrolador não confirmou CMD 3"
+                
+        except Exception as e:
+            response.success = False
+            response.message = f"Erro ao enviar comando de piscagem: {str(e)}"
+            self.get_logger().error(response.message)
+        
+        return response
         
     def sendMotorsConfig(self) -> None:  
         """
@@ -76,7 +110,6 @@ class EmotionsBridge(Node):
         @param response_msg: (str) The expected response message.  
         """
         received_msg = ""
-        number_of_dict = 0
         while True:
             if self.serial.in_waiting > 0:
                 try:
