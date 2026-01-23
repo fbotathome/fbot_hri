@@ -8,5 +8,41 @@
         "vector": "cpp",
         "string_view": "cpp",
         "initializer_list": "cpp"
-    }
+    },
+    "python.autoComplete.extraPaths": [
+        "/home/maninho/fbot_ws/install/fbot_head/lib/python3.10/site-packages",
+        "/home/maninho/ros2_ws/install/robo_sentidos/lib/python3.10/site-packages",
+        "/home/maninho/ros2_ws/build/my_py_pkg",
+        "/home/maninho/ros2_ws/install/my_py_pkg/lib/python3.10/site-packages",
+        "/home/maninho/ros2_ws/build/meu_fsm_pkg",
+        "/home/maninho/ros2_ws/install/meu_fsm_pkg/lib/python3.10/site-packages",
+        "/home/maninho/fbot_ws/install/fbot_behavior/lib/python3.10/site-packages",
+        "/home/maninho/fbot_ws/install/fbot_agent_msgs/local/lib/python3.10/dist-packages",
+        "/home/maninho/fbot_ws/install/fbot_agent/lib/python3.10/site-packages",
+        "/opt/ros/humble/lib/python3.10/site-packages",
+        "/opt/ros/humble/local/lib/python3.10/dist-packages",
+        "",
+        "/opt/ros/humble/lib/yasmin_factory",
+        "/opt/ros/humble/lib/yasmin_factory",
+        "/opt/ros/humble/lib/yasmin_factory",
+        "/opt/ros/humble/lib/yasmin_factory"
+    ],
+    "python.analysis.extraPaths": [
+        "/home/maninho/fbot_ws/install/fbot_head/lib/python3.10/site-packages",
+        "/home/maninho/ros2_ws/install/robo_sentidos/lib/python3.10/site-packages",
+        "/home/maninho/ros2_ws/build/my_py_pkg",
+        "/home/maninho/ros2_ws/install/my_py_pkg/lib/python3.10/site-packages",
+        "/home/maninho/ros2_ws/build/meu_fsm_pkg",
+        "/home/maninho/ros2_ws/install/meu_fsm_pkg/lib/python3.10/site-packages",
+        "/home/maninho/fbot_ws/install/fbot_behavior/lib/python3.10/site-packages",
+        "/home/maninho/fbot_ws/install/fbot_agent_msgs/local/lib/python3.10/dist-packages",
+        "/home/maninho/fbot_ws/install/fbot_agent/lib/python3.10/site-packages",
+        "/opt/ros/humble/lib/python3.10/site-packages",
+        "/opt/ros/humble/local/lib/python3.10/dist-packages",
+        "",
+        "/opt/ros/humble/lib/yasmin_factory",
+        "/opt/ros/humble/lib/yasmin_factory",
+        "/opt/ros/humble/lib/yasmin_factory",
+        "/opt/ros/humble/lib/yasmin_factory"
+    ]
 }

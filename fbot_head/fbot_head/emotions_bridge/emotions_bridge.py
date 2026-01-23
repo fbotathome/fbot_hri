@@ -75,22 +75,28 @@ class EmotionsBridge(Node):
         """
         @brief Sends motor configuration data to the microcontroller, so it can instantiate the motor classes in its firmware.
         """
-
         max_retries = 3
         retries = 0
         success = False
 
-        
         motors_pins: dict = {
-            "cmd": 1
+            "cmd": 1,
+            "blink_cfg": {} # Novo sub-dicionário para parâmetros de piscagem
         }
 
         for motor in self.motors:
-
             motors_pins[motor] = self.get_parameter(motor+'.pin').value
+            
+            # Verifica se é uma pálpebra configurada para piscar (Busca dinamicamente no YAML)
+            if self.has_parameter(motor+'.blink_left') and self.get_parameter(motor+'.blink_left').value:
+                motors_pins["blink_cfg"]["nameL"] = motor
+                motors_pins["blink_cfg"]["angleL"] = self.get_parameter(motor+'.blink_closed_angle').value
+            
+            if self.has_parameter(motor+'.blink_right') and self.get_parameter(motor+'.blink_right').value:
+                motors_pins["blink_cfg"]["nameR"] = motor
+                motors_pins["blink_cfg"]["angleR"] = self.get_parameter(motor+'.blink_closed_angle').value
 
         data_str = json.dumps(motors_pins)
-
         data_bytes = data_str.encode('utf-8')
 
         self.serial.write(data_bytes)
@@ -190,10 +196,11 @@ class EmotionsBridge(Node):
             config = yaml.safe_load(config_file)[self.get_name()]['ros__parameters']
 
         self.motors = config
-        for motor, value in config.items():
-            for param, value in value.items():
-                self.declare_parameter(motor+'.'+param, value)
-            
+        for motor, params in config.items():
+            # Itera sobre cada sub-item do motor (pin, blink_left, etc)
+            for param_name, param_value in params.items():
+                self.declare_parameter(motor + '.' + param_name, param_value)
+                
             
 
 def main(args=None):

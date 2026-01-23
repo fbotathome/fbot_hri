@@ -66,6 +66,8 @@ emotions_bridge:
         start_angle: 40 ##tested - invertido (quanto maior, mais fechado)
         final_angle: 140 ##tested
         type: 'percentual'
+        blink_left: true
+        blink_closed_angle: 140 # Novo: Ângulo para fechar no piscar
 
         neutral: 60 #60
         happy: 40 #ok
@@ -81,7 +83,9 @@ emotions_bridge:
         start_angle: 35 ##tested (quanto maior, mais aberto)
         final_angle: 150 #tested 
         type: 'percentual'
-
+        blink_right: true
+        blink_closed_angle: 35 # Novo: Ângulo para fechar no piscar
+        
         neutral: 130 #130
         happy: 150 #ok
         sad: 85 #ok

@@ -14,15 +14,15 @@ bool blinkEnabled = false;
 unsigned long nextBlinkMillis = 0;
 unsigned long blinkEndMillis = 0;
 bool isBlinking = false;
-String nameEyelidL = "eyelid_left"; 
-String nameEyelidR = "eyelid_right";
-int angleClosedL = 140; 
-int angleClosedR = 35; 
+
+// ----- PARAMETRIZAR -----------
+String nameEyelidL = ""; 
+String nameEyelidR = "";
+int angleClosedL = 0; 
+int angleClosedR = 0; 
+// --------------------------------------------
 int currentEyelidLeftAngle = 60;   
 int currentEyelidRightAngle = 130; 
-int neutralL = 60;
-int neutralR = 130;
-// --------------------------------------------
 
 //functions declarations
 std::map<String, int> configureMotors(JsonObject motors_config);
@@ -112,6 +112,7 @@ void loop() {
     case TOGGLE_BLINK: 
       if (json_obj.containsKey("blink")) {
           blinkEnabled = json_obj["blink"].as<bool>();
+          
           response = "{\"response\": \"success\", \"blink_enabled\": " + String(blinkEnabled ? "true" : "false") + "}";
       }
       break;
@@ -125,8 +126,8 @@ void loop() {
 }
 
 void handleBlinking() {
-    bool isAtNeutral = (currentEyelidLeftAngle == neutralL && currentEyelidRightAngle == neutralR);
-    if (!blinkEnabled || !isAtNeutral || motors.count(nameEyelidL) == 0) return;
+    // SEGURANÇA: Se os parâmetros não foram carregados via YAML, a função aborta silenciosamente
+    if (!blinkEnabled || nameEyelidL == "" || motors.count(nameEyelidL) == 0) return;
 
     unsigned long currentMillis = millis();
     if (!isBlinking && currentMillis >= nextBlinkMillis) {
@@ -175,9 +176,20 @@ std::map<String, int> configureMotors(JsonObject motors_config) {
   // std::map<String, Servo> motors_dict;
   std::map<String, int> motors_dict; // Use int to store pin numbers
 
+  // NOVO: Captura parâmetros dinâmicos de piscagem se existirem
+  if (motors_config.containsKey("blink_cfg")) {
+    JsonObject bCfg = motors_config["blink_cfg"];
+    nameEyelidL = bCfg["nameL"].as<String>();
+    nameEyelidR = bCfg["nameR"].as<String>();
+    angleClosedL = bCfg["angleL"].as<int>();
+    angleClosedR = bCfg["angleR"].as<int>();
+  }
+
   if(motors_config["cmd"].is<JsonVariant>()){
     motors_config.remove("cmd");
   }
+  motors_config.remove("blink_cfg"); // Remove para não tentar criar pino para o objeto de config
+
   for (JsonPair key_value : motors_config) {
     const char* motor_name = key_value.key().c_str();
     int motor_pin = key_value.value().as<int>();
@@ -230,8 +242,7 @@ void clearMotors() {
 
 /**
  * @brief Converts an angle in degrees (0-180) to a pulse width in microseconds.
- * 
- * @param angle The desired angle in degrees (0-180).
+ * * @param angle The desired angle in degrees (0-180).
  * @return int The corresponding pulse width in microseconds.
  */
 
@@ -241,8 +252,7 @@ int angleToPulse(int angle) {
 
 /**
  * @brief Writes the desired angle directly to the servo.
- * 
- * @param pin The servo pin/channel on the PCA9685.
+ * * @param pin The servo pin/channel on the PCA9685.
  * @param angle The desired angle in degrees (0-180).
  */
 void writeToAngle(int pin, int angle) {
