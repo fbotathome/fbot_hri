@@ -31,10 +31,10 @@ class SpeechSynthesizerNode(WavToMouth):
         self.synthesizerService = self.create_service(SynthesizeSpeech, self.synthesizer_service_param, self.synthesizeSpeech)
         self.saveSynthesizerService = self.create_service(FileSynthesizer, self.save_synthesizer_service_param, self.saveSynthesizer) 
 
-    def declareParameters(self):
+    def declareParameters(self):   #See here
         self.declare_parameter('tts_configs.language_code', 'pt-BR')
         self.declare_parameter('tts_configs.sample_rate_hz', 44100)
-        self.declare_parameter('tts_configs.voice_name', 'Portuguese-BR') # Here it can be just '' or 'pt-BR'
+        self.declare_parameter('tts_configs.voice_name', 'Portuguese-BR') # Here it can be just '' or 'pt-BR', if used the model HifiganFatspitch has "  .Female-1"
         self.declare_parameter('riva.url', 'localhost:50051')
         self.declare_parameter('services.audio_player_by_data.service', '/fbot_speech/ap/audio_player_by_data')
         self.declare_parameter('services.save_synthesizer.service', '/fbot_speech/ss/save_synthesizer')
@@ -125,7 +125,7 @@ class SpeechSynthesizerNode(WavToMouth):
         """
         synthesizer = SynthesizeSpeech.Request()
         synthesizer.text = request.text
-        synthesizer.lang = 'en-US'
+        synthesizer.lang = 'pt-BR'     #ajust parameters
         try:
             out_f = wave.open(request.output_file, 'wb')
             out_f.setnchannels(1)
