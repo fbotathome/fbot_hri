@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 # coding: utf-8
 import numpy as np
-import riva.client
+#import riva.client
 import rclpy
 import wave
+
+from TTS.api import TTS 
 
 from fbot_speech_msgs.srv import SynthesizeSpeech, FileSynthesizer
 from fbot_speech_msgs.msg import SynthesizeSpeechMessage
@@ -20,8 +22,12 @@ class SpeechSynthesizerNode(WavToMouth):
         self.readParameters()
         self.initRosComm()
         self.event = Event()
-        auth = riva.client.Auth(uri=self.riva_url)
-        self.riva_tts = riva.client.SpeechSynthesisService(auth)
+        #auth = riva.client.Auth(uri=self.riva_url)
+        #self.riva_tts = riva.client.SpeechSynthesisService(auth)
+
+        # Inicializa o modelo português do Coqui
+        self.tts = TTS(model_name="tts_models/pt/cv/vits")
+
         self.get_logger().info("Speech Synthesizer Node initialized!")
 
     def initRosComm(self):
@@ -33,9 +39,9 @@ class SpeechSynthesizerNode(WavToMouth):
 
     def declareParameters(self):   #See here
         self.declare_parameter('tts_configs.language_code', 'pt-BR')
-        self.declare_parameter('tts_configs.sample_rate_hz', 44100)
-        self.declare_parameter('tts_configs.voice_name', 'Portuguese-BR') # Here it can be just '' or 'pt-BR', if used the model HifiganFatspitch has "  .Female-1"
-        self.declare_parameter('riva.url', 'localhost:50051')
+        self.declare_parameter('tts_configs.sample_rate_hz', 22050)   #44100
+        self.declare_parameter('tts_configs.voice_name', 'coqui') # Here it can be just '' or 'pt-BR', if used the model HifiganFatspitch has "  .Female-1" or Portuguese-BR
+        #self.declare_parameter('riva.url', 'localhost:50051')
         self.declare_parameter('services.audio_player_by_data.service', '/fbot_speech/ap/audio_player_by_data')
         self.declare_parameter('services.save_synthesizer.service', '/fbot_speech/ss/save_synthesizer')
         self.declare_parameter('services.speech_synthesizer.service', '/fbot_speech/ss/say_something')
@@ -51,7 +57,7 @@ class SpeechSynthesizerNode(WavToMouth):
             "sample_rate_hz": self.get_parameter('tts_configs.sample_rate_hz').get_parameter_value().integer_value,
             "voice_name": self.get_parameter('tts_configs.voice_name').get_parameter_value().string_value,
         }
-        self.riva_url = self.get_parameter('riva.url').get_parameter_value().string_value
+        #self.riva_url = self.get_parameter('riva.url').get_parameter_value().string_value
 
     def synthesizeSpeech(self, request: SynthesizeSpeech.Request, response: SynthesizeSpeech.Response):
         """
@@ -59,10 +65,10 @@ class SpeechSynthesizerNode(WavToMouth):
         @param request: The request object containing the text to synthesize.
         @return: The response object indicating success or failure.
         """
-        config = self.configs
+        #config = self.configs
         speech = request.text
         try:
-            # Call Riva TTS to synthesize the speech
+            '''# Call Riva TTS to synthesize the speech
             self.resp = self.riva_tts.synthesize(
                 custom_dictionary=config, 
                 text=speech,
@@ -76,10 +82,20 @@ class SpeechSynthesizerNode(WavToMouth):
             audio_samples = np.frombuffer(self.resp.audio, dtype=np.int16)
             # Prepare the audio data to send to the audio player
             audio_data = AudioData()
-            audio_data.uint8_data = audio_samples.tobytes()
+            audio_data.uint8_data = audio_samples.tobytes()  '''
             
+            # Gera áudio com Coqui
+            audio = self.tts.tts(text=speech)
+
+            # Converte para formato compatível 
+            audio = np.array(audio)
+            audio = (audio * 32767).astype(np.int16)
+
+            audio_data = AudioData()
+            audio_data.uint8_data = audio.tobytes()
+
             audio_info = AudioInfo()
-            audio_info.rate = config["sample_rate_hz"]
+            audio_info.rate = self.configs["sample_rate_hz"]
             audio_info.channels = 1
             audio_info.format = 16    
 
@@ -96,7 +112,7 @@ class SpeechSynthesizerNode(WavToMouth):
                     continue
                 response.success = self.playAllData()
                 self.get_logger().info(f"AllData: {response}")
-            except:
+            except Exception as e: #except:
                 response.success = False
                 self.get_logger().error(f"Error while synthesizing speech voice: {e}")
         
@@ -123,22 +139,26 @@ class SpeechSynthesizerNode(WavToMouth):
         @param request: The request object containing the text to synthesize and the output file path
         @return: The response object indicating success or failure.
         """
-        synthesizer = SynthesizeSpeech.Request()
-        synthesizer.text = request.text
-        synthesizer.lang = 'pt-BR'     #ajust parameters
+        #synthesizer = SynthesizeSpeech.Request()
+        #synthesizer.text = request.text
+        #synthesizer.lang = 'pt-BR'     #ajust parameters
         try:
+            audio = self.tts.tts(text=request.text)
+            audio = np.array(audio, dtype=np.float32) #just audio
+            audio = (audio * 32767).astype(np.int16)
+
             out_f = wave.open(request.output_file, 'wb')
             out_f.setnchannels(1)
             out_f.setsampwidth(2)
             out_f.setframerate(self.configs['sample_rate_hz'])
-            self.synthesizeSpeech(synthesizer, SynthesizeSpeech.Response())
-            out_f.writeframes(self.resp.audio)
+            #self.synthesizeSpeech(synthesizer, SynthesizeSpeech.Response())
+            out_f.writeframes(audio.tobytes())
             out_f.close()
-            response = FileSynthesizer.Response()
+            #response = FileSynthesizer.Response()
             response.success = True
             return response
         except Exception as e:
-            response = SynthesizeSpeech.Response()
+            #response = SynthesizeSpeech.Response()
             response.success = False
             self.get_logger().error(f"Error while saving file: {e}")
             return response
