@@ -26,7 +26,14 @@ class SpeechSynthesizerNode(WavToMouth):
         #self.riva_tts = riva.client.SpeechSynthesisService(auth)
 
         # Inicializa o modelo português do Coqui
-        self.tts = TTS(model_name="tts_models/pt/cv/vits")
+        self.tts = TTS(model_name="tts_models/multilingual/multi-dataset/xtts_v2", gpu=True)
+        self.speaker_wav = "src/fbot_hri/fbot_speech/audios/clone_voice_ptbr.wav"
+        # pré-carrega modelo
+        self.tts.tts(
+            text="Inicializando sistema de voz",
+            speaker_wav=self.speaker_wav,
+            language="pt"
+        )
 
         self.get_logger().info("Speech Synthesizer Node initialized!")
 
@@ -39,7 +46,7 @@ class SpeechSynthesizerNode(WavToMouth):
 
     def declareParameters(self):   #See here
         self.declare_parameter('tts_configs.language_code', 'pt-BR')
-        self.declare_parameter('tts_configs.sample_rate_hz', 22050)   #44100
+        self.declare_parameter('tts_configs.sample_rate_hz', 24000)   #44100 or 22050
         self.declare_parameter('tts_configs.voice_name', 'coqui') # Here it can be just '' or 'pt-BR', if used the model HifiganFatspitch has "  .Female-1" or Portuguese-BR
         #self.declare_parameter('riva.url', 'localhost:50051')
         self.declare_parameter('services.audio_player_by_data.service', '/fbot_speech/ap/audio_player_by_data')
@@ -85,10 +92,14 @@ class SpeechSynthesizerNode(WavToMouth):
             audio_data.uint8_data = audio_samples.tobytes()  '''
             
             # Gera áudio com Coqui
-            audio = self.tts.tts(text=speech)
+            audio = self.tts.tts(
+                text=speech,
+                speaker_wav=self.speaker_wav,
+                language="pt"
+            )
 
             # Converte para formato compatível 
-            audio = np.array(audio)
+            audio = np.array(audio, dtype=np.float32)
             audio = (audio * 32767).astype(np.int16)
 
             audio_data = AudioData()
@@ -143,7 +154,12 @@ class SpeechSynthesizerNode(WavToMouth):
         #synthesizer.text = request.text
         #synthesizer.lang = 'pt-BR'     #ajust parameters
         try:
-            audio = self.tts.tts(text=request.text)
+            audio = self.tts.tts(
+                text=request.text,
+                speaker_wav=self.speaker_wav,
+                language="pt"
+            )
+
             audio = np.array(audio, dtype=np.float32) #just audio
             audio = (audio * 32767).astype(np.int16)
 
