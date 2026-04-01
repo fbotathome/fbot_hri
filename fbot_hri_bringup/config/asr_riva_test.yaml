@@ -1,7 +1,7 @@
 asr_riva_node:
   ros__parameters:
     stt_mic_timeout: 10
-    riva.url: jetson:50051
+    riva.url: 192.168.4.102:50051
     stt_configs:
       start_history: 50
       start_threshold: -1
