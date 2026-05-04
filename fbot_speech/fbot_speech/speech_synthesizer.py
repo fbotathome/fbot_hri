@@ -27,7 +27,7 @@ class SpeechSynthesizerNode(WavToMouth):
         self.initRosComm()
         self.event = Event()
 
-        self.tts_url = "http://10.229.2.75:5002/api/tts"
+        self.tts_url = "http://jetson:5002/api/tts"
 
         self.get_logger().info("Speech Synthesizer Node initialized!")
 
@@ -53,7 +53,7 @@ class SpeechSynthesizerNode(WavToMouth):
 
     def declareParameters(self):
         self.declare_parameter('tts_configs.language_code', 'en-US')
-        self.declare_parameter('tts_configs.sample_rate_hz', 24000)
+        self.declare_parameter('tts_configs.sample_rate_hz', 44100)
         self.declare_parameter('tts_configs.voice_name', 'English-US')
 
         self.declare_parameter('riva.url', 'localhost:50051')
@@ -109,6 +109,9 @@ class SpeechSynthesizerNode(WavToMouth):
                 return response
 
             wav_file = wave.open(io.BytesIO(res.content), 'rb')
+            #test
+            actual_sample_rate = wav_file.getframerate() 
+            
             audio_pcm = wav_file.readframes(wav_file.getnframes())
 
             self.resp = FakeResp(audio_pcm)
@@ -166,9 +169,9 @@ class SpeechSynthesizerNode(WavToMouth):
                     pass
                 
                 fake_info = DummyInfo()
-                fake_info.rate = config["sample_rate_hz"]
-                fake_info.sample_rate = config["sample_rate_hz"]
-                fake_info.channels = 1
+                fake_info.rate = actual_sample_rate
+                fake_info.sample_rate = actual_sample_rate
+                fake_info.channels = wav_file.getnchannels() # puxa variavael
                 fake_info.format = 16
                 
                 self.setDataAndInfo(data, fake_info) #ate aqui teste pc 
