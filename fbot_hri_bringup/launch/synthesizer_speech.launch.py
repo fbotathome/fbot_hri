@@ -129,7 +129,17 @@ def generate_launch_description():
                     ],
         condition=UnlessCondition(LaunchConfiguration('use_remote'))
     )
-
+    script_node = NodeRemoteSSH(
+        name='script_node',
+        package='fbot_speech',
+        executable='portugues.sh',
+        parameters=[LaunchConfiguration('ros_config_remote')],
+        user='jetson',
+        machine="jetson",
+        source_paths=[
+            "/home/jetson/jetson_ws/install/setup.bash"
+        ],
+    )
     return LaunchDescription([
         ros_config_file_arg,
         ros_config_file_remote_arg,
@@ -140,5 +150,6 @@ def generate_launch_description():
         audio_player_node,
         audio_player_remote_node,
         speech_synthesizer_remote_node,
-        speech_synthesizer_node
+        speech_synthesizer_node,
+        script_node
     ])
