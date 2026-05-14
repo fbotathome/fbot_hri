@@ -6,7 +6,7 @@ import rclpy
 import serial
 from rclpy.node import Node
 from std_msgs.msg import String
-from std_srvs.srv import SetBool  # ADICIONADO: Importação para o serviço de piscagem
+from std_srvs.srv import SetBool  # Added: Import for the blinking service
 from ament_index_python.packages import get_package_share_directory
 
 class EmotionsBridge(Node):
@@ -16,6 +16,8 @@ class EmotionsBridge(Node):
         @brief A Node for managing emotions and motor configurations.
         @param pause: If True, the node will not send any data to the motors.
         """
+        self.declare_parameter('default_blink', False) # Default state if not specified
+        default_blink_val = self.get_parameter('default_blink').value
 
         super().__init__('emotions_bridge')
 
@@ -26,7 +28,7 @@ class EmotionsBridge(Node):
             return
 
         self.motors = None
-        #CARREGAR PARÂMETROS DO YAML    
+        #LOAD YAML PARAMETERS  
         self.loadMotorsParams('motors.yaml')
 
         self.sendMotorsConfig()
@@ -36,27 +38,27 @@ class EmotionsBridge(Node):
 
         self.sub_emotion = self.create_subscription(String, 'fbot_face/emotion', self.emotionCallback, 10)
 
-        # ADICIONADO: Serviço para ativar/desativar piscagem (CMD 3)
+        # ADDED: Service to enable/disable blinking (CMD 3)
         self.srv_blink = self.create_service(SetBool, 'set_blink', self.set_blink_callback)
         self.get_logger().info("Serviço 'set_blink' (CMD 3) inicializado.")
 
         time.sleep(2)
 
-    # ADICIONADO: CALLBACK DO NOVO SERVIÇO (CMD 3)
+    # ADDED: NEW SERVICE CALLBACK (CMD 3)
     def set_blink_callback(self, request, response):
         """
-        @brief Callback para o serviço de piscagem. Envia o CMD 3 para o firmware.
+        @brief Callback for the blinking service. Sends CMD 3 to the firmware.
         """
         try:
-            # Monta o JSON para o comando 3 definido no firmware
+            # Mount the JSON for the CMD 3 defined in the firmware
             msg = {"cmd": 3, "blink": request.data}
             data_str = json.dumps(msg)
             data_bytes = data_str.encode('utf-8')
             
             self.serial.write(data_bytes)
             self.get_logger().info(f'Sent blink command (CMD 3): {data_str}')
-            
-            # Aguarda a resposta de sucesso do microcontrolador
+
+            # Awaiting successful response from the microcontroller
             if self.waitSerialResponse("success"):
                 response.success = True
                 response.message = f"Piscagem definida como: {request.data}"
@@ -81,13 +83,13 @@ class EmotionsBridge(Node):
 
         motors_pins: dict = {
             "cmd": 1,
-            "blink_cfg": {} # Novo sub-dicionário para parâmetros de piscagem
+            "blink_cfg": {} # New sub-dictionary for blinking parameters
         }
 
         for motor in self.motors:
             motors_pins[motor] = self.get_parameter(motor+'.pin').value
             
-            # Verifica se é uma pálpebra configurada para piscar (Busca dinamicamente no YAML)
+            # Verifies if it's a eyelid configured for blinking (Dynamically searches in the YAML)
             if self.has_parameter(motor+'.blink_left') and self.get_parameter(motor+'.blink_left').value:
                 motors_pins["blink_cfg"]["nameL"] = motor
                 motors_pins["blink_cfg"]["angleL"] = self.get_parameter(motor+'.blink_closed_angle').value

@@ -63,11 +63,10 @@ emotions_bridge:
 
       eyelid_left: 
         pin: 8
-        start_angle: 40 ##tested - invertido (quanto maior, mais fechado)
+        start_angle: 40 ##tested - inverted (the larger it is, the more closed it is)
         final_angle: 140 ##tested
         type: 'percentual'
-        blink_left: true
-        blink_closed_angle: 140 # Novo: Ângulo para fechar no piscar
+        blink_left_angle: 140
 
         neutral: 60 #60
         happy: 40 #ok
@@ -80,11 +79,10 @@ emotions_bridge:
 
       eyelid_right:
         pin: 11
-        start_angle: 35 ##tested (quanto maior, mais aberto)
+        start_angle: 35 ##tested (the larger, the more open)
         final_angle: 150 #tested 
         type: 'percentual'
-        blink_right: true
-        blink_closed_angle: 35 # Novo: Ângulo para fechar no piscar
+        blink_right_angle: 35
         
         neutral: 130 #130
         happy: 150 #ok
