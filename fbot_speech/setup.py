@@ -30,6 +30,7 @@ setup(
             'detector_hotword_node = fbot_speech.detector_hotword_node:main',
             'audio_player = fbot_speech.audio_player:main',
             'asr_riva = fbot_speech.speech_recognizer_riva:main',
+            'doorbell_detector = fbot_speech.doorbell_detector_node:main',
             ]
     },
 )
