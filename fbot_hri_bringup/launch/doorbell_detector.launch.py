@@ -11,7 +11,7 @@ def generate_launch_description():
             'threshold': 0.05,
             'publish_false': False,
             'device_index': -1,
-            'model_path': '/home/fbot_ws/src/fbot_hri/fbot_speech/model/yamnet-tensorflow2-yamnet-v1',
+            'model_path': '/home/fbot/fbot_ws/src/fbot_hri/fbot_speech/model/yamnet-tensorflow2-yamnet-v1',
         }]
     )
 

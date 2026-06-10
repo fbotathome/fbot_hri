@@ -48,7 +48,7 @@ class DoorbellDetectorNode(Node):
         self.declare_parameter('threshold',     0.05)
         self.declare_parameter('publish_false', False)
         self.declare_parameter('device_index',  -1)
-        self.declare_parameter('model_path', '/home/othavio/fbot_ws/src/fbot_hri/fbot_speech/model/yamnet-tensorflow2-yamnet-v1')
+        self.declare_parameter('model_path', '/home/fbot/fbot_ws/src/fbot_hri/fbot_speech/model/yamnet-tensorflow2-yamnet-v1')
 
         # FIX: read each parameter only once, after all declare_parameter calls
         self.threshold     = self.get_parameter('threshold').value
