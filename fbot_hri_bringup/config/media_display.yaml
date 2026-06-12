@@ -1,9 +1,9 @@
 media_display_node:
   ros__parameters:
     screen:
-      width: 800
-      height: 480
+      width: 1900
+      height: 860
       margin_x: 20
-      margin_y: 30
+      margin_y: 20
     font:
       path: '/fonts/vox_regular14.ttf'
