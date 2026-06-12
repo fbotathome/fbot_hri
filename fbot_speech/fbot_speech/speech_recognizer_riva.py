@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import os
 import rclpy
 import riva.client
 import riva.client.proto.riva_asr_pb2 as rasr
 import riva.client.audio_io
-import queue
+import os
 import time
 import threading
 from rclpy.node import Node
 from std_srvs.srv import Empty
 from fbot_speech_msgs.srv import RivaToText
+from playsound import playsound
 from copy import deepcopy
 
 DEFAULT_LANGUAGE = 'en'
@@ -54,14 +54,6 @@ class RivaRecognizerNode(Node):
         default_device_info = riva.client.audio_io.get_default_input_device_info()
         self.device = default_device_info['index']
 
-        self.get_logger().info("Microphone Opened: {}".format(default_device_info['name']))
-        self.mic_stream = riva.client.audio_io.MicrophoneStream(
-            rate=16000,
-            chunk=512,
-            device=self.device,
-        )
-        self.mic_stream.__enter__()
-        self.get_logger().info("Microphone Stream Initialized.")
 
     def initRosComm(self):
         self.speech_recognition_service = self.create_service(RivaToText, self.recognizer_service_param, self.handleRecognition)
@@ -95,30 +87,8 @@ class RivaRecognizerNode(Node):
 
     def delayStarterRecorder(self):
         time.sleep(0.75)
-        self.audio_player_beep_service.call_async(Empty.Request())
-
-    def get_audio_generator(self):
-        self._stop_yielding = False
-
-        try:
-            while True:
-                self.mic_stream._buff.get_nowait()
-        except queue.Empty:
-            pass
-            
-        while not self._stop_yielding:
-            try:
-                data = [self.mic_stream._buff.get(timeout=0.01)]
-                
-                while True:
-                    try:
-                        data.append(self.mic_stream._buff.get_nowait())
-                    except queue.Empty:
-                        break
-                        
-                yield b''.join(data)
-            except queue.Empty:
-                continue
+        self.audio_player_beep_service.call(Empty.Request())
+        #playsound(TALK_AUDIO)
     
     def handleRecognition(self, req: RivaToText.Request, res: RivaToText.Response):
         """
@@ -126,85 +96,74 @@ class RivaRecognizerNode(Node):
         This function is called when a new request is received for speech recognition
         """
         config_service = deepcopy(self.config)
-        res.text = "" 
+        with riva.client.audio_io.MicrophoneStream(
+                                                        rate =16000,
+                                                        chunk=512,
+                                                        device=self.device,
+                                                    ) as audio_chunk_iterator:
+            speech_context = rasr.SpeechContext()
+            good_output = ''
+            bad_output = ''
+            very_bad_output = ''
+            delay_starter = threading.Thread(target=self.delayStarterRecorder)
+            
 
-        speech_context = rasr.SpeechContext()
-        good_output = ''
-        bad_output = ''
-        very_bad_output = ''
-        delay_starter = threading.Thread(target=self.delayStarterRecorder)
-        
-
-        if req.boosted_lm_words != '':
-            speech_context.phrases.extend(req.boosted_lm_words)
-            speech_context.boost = req.boost
-            config_service.config.speech_contexts.extend([speech_context])
-        
-        if req.sentence:
-            self.sentence = True
-            self.word = False
-        else:
-            self.sentence = False
-            self.word = True
+            if req.boosted_lm_words != '':
+                speech_context.phrases.extend(req.boosted_lm_words)
+                speech_context.boost = req.boost
+                config_service.config.speech_contexts.extend([speech_context])
+            
+            if req.sentence:
+                self.sentence = True
+                self.word = False
+            else:
+                self.sentence = False
+                self.word = True
 
 
-        audio_generator = self.get_audio_generator()
-
-        output = self.riva_asr.streaming_response_generator(
-                audio_chunks=audio_generator,
-                streaming_config=config_service)
-        
-        start = time.time() + self.stt_mic_timeout
-        delay_starter.start()
-
-        stop_requested = False
-
-        for response in output:
-            if (start > time.time()):
-                if not response.results or stop_requested:
-                    continue
-                for result in response.results:
-                    if not result.alternatives:
+            output = self.riva_asr.streaming_response_generator(
+                    audio_chunks=audio_chunk_iterator,
+                    streaming_config=config_service)
+            
+            start = time.time() + self.stt_mic_timeout
+            delay_starter.start()
+            for response in output:
+                if (start > time.time()):
+                    if not response.results:
                         continue
-                if result.is_final:
-                    if self.word:
-                        if result.alternatives[0].words[0].word in req.boosted_lm_words:
-                            if result.alternatives[0].words[0].confidence >=0.6:
-                                res.text = result.alternatives[0].words[0].word
-                                self._stop_yielding = True
-                                stop_requested = True
-                            else:
-                                bad_output = result.alternatives[0].words[0].word
-                        else:
-                            very_bad_output = result.alternatives[0].words[0].word
-                    elif self.sentence:
-                        found_boosted = False
-                        for alternative in result.alternatives:
-                            for word in alternative.words:
-                                if word.word in req.boosted_lm_words:
-                                    res.text = result.alternatives[0].transcript 
-                                    found_boosted = True
-                                    break
+                    for result in response.results:
+                        if not result.alternatives:
+                            continue
+                    if result.is_final:
+                        if self.word:
+                            if result.alternatives[0].words[0].word in req.boosted_lm_words:
+                                if result.alternatives[0].words[0].confidence >=0.6:
+                                    good_output = result.alternatives[0].words[0].word
+                                    res.text = good_output
+                                    audio_chunk_iterator.close()
+                                    return res
                                 else:
-                                    bad_output = result.alternatives[0].transcript
-                            if found_boosted:
-                                break
-                        if found_boosted:
-                            self._stop_yielding = True # Sinaliza pro gerador parar
-                            stop_requested = True 
-            else:
-                self._stop_yielding = True
-                stop_requested = True
-                continue 
-        if res.text == "":
-            if bad_output != '':
-                res.text = bad_output
-            else:
-                res.text = very_bad_output
-                
-        self.get_logger().info(f"Final Result: {res.text}")
-        return res
-    
+                                    bad_output = result.alternatives[0].words[0].word
+                            else:
+                                very_bad_output = result.alternatives[0].words[0].word
+                        elif self.sentence:
+                            for alternative in result.alternatives:
+                                for word in alternative.words:
+                                    if word.word in req.boosted_lm_words:
+                                        res.text = result.alternatives[0].transcript 
+                                        audio_chunk_iterator.close()
+                                        return res
+                                    else:
+                                        bad_output = result.alternatives[0].transcript
+                else:
+                    audio_chunk_iterator.close()
+                    if bad_output != '':
+                        res.text = bad_output
+                        return res
+                    else:
+                        res.text = very_bad_output
+                        return res
+
 def main(args=None):
     rclpy.init(args=args)
 
