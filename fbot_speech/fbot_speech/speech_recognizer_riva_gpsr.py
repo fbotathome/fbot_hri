@@ -4,6 +4,7 @@ import rclpy
 import riva.client
 import riva.client.proto.riva_asr_pb2 as rasr
 import riva.client.audio_io
+import queue
 import time
 import threading
 from rclpy.node import Node
@@ -49,6 +50,16 @@ class RivaRecognizerGpsrNode(Node):
         default_device_info = riva.client.audio_io.get_default_input_device_info()
         self.device = default_device_info['index']
 
+        self.get_logger().info("Microphone Opened: {}".format(default_device_info['name']))
+        self.mic_stream = riva.client.audio_io.MicrophoneStream(
+            rate=16000,
+            chunk=512,
+            device=self.device,
+        )
+        self.mic_stream.__enter__()
+        self._stop_yielding = False
+        self.get_logger().info("Microphone Stream Initialized.")
+
 
     def initRosComm(self):
         self.speech_recognition_service = self.create_service(RivaToText, self.recognizer_service_param, self.handleRecognition)
@@ -84,7 +95,33 @@ class RivaRecognizerGpsrNode(Node):
 
     def delayStarterRecorder(self):
         time.sleep(0.75)
-        self.audio_player_beep_service.call(Empty.Request())
+        self.audio_player_beep_service.call_async(Empty.Request())
+
+    def get_audio_generator(self):
+        """Yield audio chunks from the persistent microphone stream until
+        self._stop_yielding is set. Drains any backlog first so each request
+        starts listening from 'now', not from stale buffered audio."""
+        self._stop_yielding = False
+
+        try:
+            while True:
+                self.mic_stream._buff.get_nowait()
+        except queue.Empty:
+            pass
+
+        while not self._stop_yielding:
+            try:
+                data = [self.mic_stream._buff.get(timeout=0.01)]
+
+                while True:
+                    try:
+                        data.append(self.mic_stream._buff.get_nowait())
+                    except queue.Empty:
+                        break
+
+                yield b''.join(data)
+            except queue.Empty:
+                continue
 
     def handleRecognition(self, req: RivaToText.Request, res: RivaToText.Response):
         """
@@ -96,32 +133,31 @@ class RivaRecognizerGpsrNode(Node):
         The last segment is kept even if it was not finalized before the stop.
         """
         config_service = deepcopy(self.config)
-        with riva.client.audio_io.MicrophoneStream(
-                                                        rate =16000,
-                                                        chunk=512,
-                                                        device=self.device,
-                                                    ) as audio_chunk_iterator:
-            delay_starter = threading.Thread(target=self.delayStarterRecorder)
 
-            if req.boosted_lm_words:
-                speech_context = rasr.SpeechContext()
-                speech_context.phrases.extend(req.boosted_lm_words)
-                speech_context.boost = req.boost
-                config_service.config.speech_contexts.extend([speech_context])
+        if req.boosted_lm_words:
+            speech_context = rasr.SpeechContext()
+            speech_context.phrases.extend(req.boosted_lm_words)
+            speech_context.boost = req.boost
+            config_service.config.speech_contexts.extend([speech_context])
 
-            output = self.riva_asr.streaming_response_generator(
-                    audio_chunks=audio_chunk_iterator,
-                    streaming_config=config_service)
+        delay_starter = threading.Thread(target=self.delayStarterRecorder)
 
-            deadline = time.time() + self.stt_mic_timeout
-            silence_limit = self.stt_silence_timeout
-            delay_starter.start()
+        audio_generator = self.get_audio_generator()
+        output = self.riva_asr.streaming_response_generator(
+                audio_chunks=audio_generator,
+                streaming_config=config_service)
 
-            segments = []
-            last_partial = ""           
-            last_change = time.time()  
-            for response in output:
-                now = time.time()
+        deadline = time.time() + self.stt_mic_timeout
+        silence_limit = self.stt_silence_timeout
+        delay_starter.start()
+
+        segments = []
+        last_partial = ""
+        last_change = time.time()
+        stop_requested = False
+        for response in output:
+            now = time.time()
+            if not stop_requested:
                 for result in response.results:
                     if not result.alternatives:
                         continue
@@ -138,18 +174,22 @@ class RivaRecognizerGpsrNode(Node):
 
                 if now >= deadline:
                     self.get_logger().warn("[GPSR ASR] hard timeout reached")
-                    break
-                if now - last_change >= silence_limit:
+                    if last_partial:
+                        segments.append(last_partial)
+                        last_partial = ""
+                    self._stop_yielding = True
+                    stop_requested = True
+                elif now - last_change >= silence_limit:
                     self.get_logger().info("[GPSR ASR] end of speech (silence)")
-                    break
+                    if last_partial:
+                        segments.append(last_partial)
+                        last_partial = ""
+                    self._stop_yielding = True
+                    stop_requested = True
 
-            if last_partial:
-                segments.append(last_partial)
-                
-            audio_chunk_iterator.close()
-            res.text = ' '.join(segments)
-            self.get_logger().info(f"[GPSR ASR] full transcript: {res.text}")
-            return res
+        res.text = ' '.join(segments)
+        self.get_logger().info(f"[GPSR ASR] full transcript: {res.text}")
+        return res
 
 
 def main(args=None):
