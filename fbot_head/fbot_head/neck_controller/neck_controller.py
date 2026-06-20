@@ -50,7 +50,7 @@ class NeckController(Node):
         }
 
         self.vel_limit = 800
-        self.neck_port = "/dev/ttyDXL"
+        self.neck_port = "/dev/ttyNECK"
         self.motors: dict[str, JointProtocol2] = {}
         self.neck_comm = None
         try:
@@ -97,7 +97,7 @@ class NeckController(Node):
         self.lookat_timer = None 
         self.lookat_timeout_callback = None
         self.frame = 'map'
-        self.look_at_topic = None
+        self.look_at_topic = ''
 
         self.current_angle = [0.0, 0.0]
         self.initial_angle = [180.0, 180.0]
@@ -457,7 +457,7 @@ class NeckController(Node):
             self.lookat_timer = None
 
         self.lookat_description_identifier = None
-        self.look_at_topic = None
+        self.look_at_topic = ''
         if was_active:
             self.get_logger().info("lookAt stopped, neck returned to initial angle.")
 
