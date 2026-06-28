@@ -37,7 +37,7 @@ class NeckController(Node):
                 'current_angle': np.pi,
                 'id': 61,
                 'min_angle': 150,
-                'max_angle': 190
+                'max_angle': 210
             },
             'head_pan_joint':{
                 'current_angle': np.pi,
@@ -97,6 +97,7 @@ class NeckController(Node):
         self.lookat_timer = None 
         self.lookat_timeout_callback = None
         self.frame = 'map'
+        self.look_at_topic = None
 
         self.current_angle = [0.0, 0.0]
         self.initial_angle = [180.0, 180.0]
@@ -311,7 +312,9 @@ class NeckController(Node):
         """
         horizontal = math.pi + math.atan2(point.y, point.x)
         dist = np.hypot(point.x, point.y)
-        vertical = math.pi + math.atan2(point.z, dist) #ajuste vertical 
+        z = point.z if not self.look_at_topic or 'tracking' not in self.look_at_topic else 0.15
+        z = z if dist > 1.7 else z + 1.2
+        vertical = math.pi + math.atan2(z, dist) #ajuste vertical 
         return [math.degrees(horizontal), math.degrees(vertical)]
 
     def lookAtStart(self, req : LookAtDescription3D.Request, res : LookAtDescription3D.Response): 
@@ -322,6 +325,7 @@ class NeckController(Node):
         self.lookat_description_identifier = {'global_id': req.global_id, 'id': req.id, 'label': req.label}
         self.initial_angle = list(req.initial_angle)
         self.sub_lookat = self.create_subscription(Detection3DArray, req.recognitions3d_topic, self.lookAtRecogCallback, 10)
+        self.look_at_topic = req.recognitions3d_topic
         self.last_pose  = None
         self.last_pose_time = 0.
         self.lookat_pose = None
@@ -369,7 +373,7 @@ class NeckController(Node):
                     return
                 
                 ps = tf2_geometry_msgs.do_transform_pose_stamped(self.lookat_pose, transform).pose.position
-
+                self.publishLookAtPointMarker(ps, transform.header.frame_id)
                 distance = 0.
                 time = self.get_clock().now().nanoseconds / 1e9
                 delta = float("inf")
@@ -450,7 +454,7 @@ class NeckController(Node):
             self.lookat_timer = None
 
         self.lookat_description_identifier = None
-
+        self.look_at_topic = None
         if was_active:
             self.get_logger().info("lookAt stopped, neck returned to initial angle.")
 
