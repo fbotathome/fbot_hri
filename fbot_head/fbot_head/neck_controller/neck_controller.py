@@ -56,10 +56,12 @@ class NeckController(Node):
         try:
             self.setupMotors()
         except RuntimeError as e:
-            self.get_logger().error(str(e))
-            return 
+            # Fail fast: a half-initialized node (no subscriptions/timers) would
+            # otherwise spin uselessly and crash later with AttributeErrors.
+            self.get_logger().fatal(str(e))
+            raise
 
-        self.pause = False
+        self.pause = pause
         self.lock_updateNeck = False
 
         self.sub_emergency_button = self.create_subscription(Bool, 'emergency_button', self.emergencyButtonCallback, 10)
@@ -101,6 +103,10 @@ class NeckController(Node):
         self.updateNeck(self.initial_angle)
         self.joints_publish_timer = self.create_timer(5, self.updateJointsDict)
 
+        self.get_logger().info(
+            f"NeckController ready: {len(self.motors)} motors on {self.neck_port}, "
+            f"paused={self.pause}.")
+
     def setupMotors(self) -> None:
         """
         @brief Initializes the Dynamixel motors, sets up the communication with the motors and configures their torque and velocity limits.
@@ -127,7 +133,11 @@ class NeckController(Node):
         @brief Sets the pause state based on the emergency button's state.
         @param msg: (std_msgs.msg.Bool) The message containing the emergency button state.
         """
-        self.pause = not msg.data
+        new_pause = not msg.data
+        if new_pause != self.pause:
+            self.get_logger().warn(
+                f"Emergency button changed: motors {'PAUSED' if new_pause else 'RESUMED'}.")
+        self.pause = new_pause
 
     def updateNeckCallback(self, msg) -> None:
         """
@@ -147,6 +157,9 @@ class NeckController(Node):
             self.get_logger().error("Failed to compute transform for updateNeckByPointCallback.")
             return
         ps = tf2_geometry_msgs.do_transform_point(msg, transform).point
+        self.get_logger().info(
+            f"updateNeckByPoint #{self.lookat_point_index}: target ({ps.x:.2f}, {ps.y:.2f}, "
+            f"{ps.z:.2f}) in '{transform.header.frame_id}' (from '{msg.header.frame_id}').")
         self.publishLookAtPointMarker(ps, transform.header.frame_id)
         angle_msg = self.computeNeckStateByPoint(ps)
         self.updateNeck(angle_msg, from_updateNeckCallback=True)
@@ -228,6 +241,8 @@ class NeckController(Node):
 
             for key in self.motors:
                 self.motors[key].sendGoalAngle(self.motors_config[key]['current_angle'])
+
+            if data:
                 self.current_angle = data
 
             self.updateJointsDict()
@@ -305,9 +320,6 @@ class NeckController(Node):
         @param req: (std_srvs.srv.Empty.Request) The service request.
         """
         self.lookat_description_identifier = {'global_id': req.global_id, 'id': req.id, 'label': req.label}
-        self.get_logger().info(f"Starting lookAt service with description: {self.lookat_description_identifier}")
-        self.get_logger().info(f"Starting lookAt initial angle: {isinstance(req.initial_angle, list)} -> {req.initial_angle} -> {type(req.initial_angle)}")
-        # if isinstance(req.initial_angle, list) and len(req.initial_angle) == 2:
         self.initial_angle = list(req.initial_angle)
         self.sub_lookat = self.create_subscription(Detection3DArray, req.recognitions3d_topic, self.lookAtRecogCallback, 10)
         self.last_pose  = None
@@ -317,8 +329,12 @@ class NeckController(Node):
         self.look_at_timeout = 10*60.0 if req.timeout == 0 else req.timeout
 
         if self.lookat_timer:
-            self.lookat_timer.cancel() 
+            self.lookat_timer.cancel()
         self.lookat_timer = self.create_timer(self.look_at_timeout, self.lookAtTimeout)
+
+        self.get_logger().info(
+            f"lookAt started: target={self.lookat_description_identifier}, "
+            f"topic='{req.recognitions3d_topic}', timeout={self.look_at_timeout:.0f}s.")
 
         return res
 
@@ -377,6 +393,8 @@ class NeckController(Node):
         """
         @brief Callback triggered when the "look at" service times out.
         """
+        self.get_logger().info(
+            f"lookAt timed out after {self.look_at_timeout:.0f}s, returning to initial angle.")
         self.updateNeck(data=self.initial_angle)
 
     def getCloserDescription(self, descriptions):
@@ -421,6 +439,7 @@ class NeckController(Node):
         @brief Stops the "look at" service and resets the neck position.
         @param req: (std_srvs.srv.Empty.Request) The service request.
         """
+        was_active = self.sub_lookat is not None
         if self.sub_lookat is not None:
             self.destroy_subscription(self.sub_lookat)
             self.sub_lookat = None
@@ -429,8 +448,11 @@ class NeckController(Node):
         if self.lookat_timer is not None:
             self.lookat_timer.cancel()
             self.lookat_timer = None
-        
+
         self.lookat_description_identifier = None
+
+        if was_active:
+            self.get_logger().info("lookAt stopped, neck returned to initial angle.")
 
         return res
 
