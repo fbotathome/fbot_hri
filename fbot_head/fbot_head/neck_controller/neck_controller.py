@@ -327,6 +327,9 @@ class NeckController(Node):
         @brief Callback for processing recognition messages and updating the neck position.
         @param msg: (fbot_vision_msgs.msg.Detection3DArray) The message containing the detected objects.
         """
+        if self.lookat_description_identifier is None:
+            return
+
         selected_desc = self.selectDescription(msg.detections)
 
         if selected_desc is not None:
