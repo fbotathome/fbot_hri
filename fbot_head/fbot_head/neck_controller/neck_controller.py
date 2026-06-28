@@ -6,12 +6,14 @@ import tf2_geometry_msgs
 from copy import deepcopy
 from rclpy.node import Node
 from rclpy.time import Time
+from rclpy.duration import Duration
 from std_srvs.srv import Empty
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Bool, Float64MultiArray
 from fbot_vision_msgs.msg import Detection3DArray
 from fbot_vision_msgs.srv import LookAtDescription3D
 from geometry_msgs.msg import PoseStamped, PointStamped
+from visualization_msgs.msg import Marker, MarkerArray
 from .PyDynamixel import DxlCommProtocol2, JointProtocol2
 
 
@@ -63,6 +65,9 @@ class NeckController(Node):
         self.sub_emergency_button = self.create_subscription(Bool, 'emergency_button', self.emergencyButtonCallback, 10)
         self.sub_update_neck = self.create_subscription(Float64MultiArray, "updateNeck", self.updateNeckCallback, 10)
         self.sub_update_neck_by_point = self.create_subscription(PointStamped, "updateNeckByPoint", self.updateNeckByPointCallback, 10)
+
+        self.pub_lookat_point_marker = self.create_publisher(MarkerArray, "updateNeckByPoint/marker", 10)
+        self.lookat_point_index = 0
 
 
         self.tf_buffer = tf2_ros.Buffer()
@@ -142,8 +147,64 @@ class NeckController(Node):
             self.get_logger().error("Failed to compute transform for updateNeckByPointCallback.")
             return
         ps = tf2_geometry_msgs.do_transform_point(msg, transform).point
+        self.publishLookAtPointMarker(ps, transform.header.frame_id)
         angle_msg = self.computeNeckStateByPoint(ps)
         self.updateNeck(angle_msg, from_updateNeckCallback=True)
+
+    def publishLookAtPointMarker(self, point, frame_id, lifetime=5.0) -> None:
+        """
+        @brief Publishes a marker representing the point that updateNeckByPoint is looking at,
+               in the frame the point was transformed to. Each call increments the look index.
+        @param point: (geometry_msgs.msg.Point) The target point, already in frame_id.
+        @param frame_id: (str) The frame the point is expressed in.
+        @param lifetime: (float) How long the marker stays visible, in seconds.
+        """
+        index = self.lookat_point_index
+        self.lookat_point_index += 1
+
+        stamp = self.get_clock().now().to_msg()
+        marker_lifetime = Duration(seconds=lifetime).to_msg()
+
+        sphere = Marker()
+        sphere.header.frame_id = frame_id
+        sphere.header.stamp = stamp
+        sphere.ns = "updateNeckByPoint"
+        sphere.id = 2 * index
+        sphere.type = Marker.SPHERE
+        sphere.action = Marker.ADD
+        sphere.pose.position.x = point.x
+        sphere.pose.position.y = point.y
+        sphere.pose.position.z = point.z
+        sphere.pose.orientation.w = 1.0
+        sphere.scale.x = 0.1
+        sphere.scale.y = 0.1
+        sphere.scale.z = 0.1
+        sphere.color.r = 0.0
+        sphere.color.g = 1.0
+        sphere.color.b = 0.0
+        sphere.color.a = 1.0
+        sphere.lifetime = marker_lifetime
+
+        text = Marker()
+        text.header.frame_id = frame_id
+        text.header.stamp = stamp
+        text.ns = "updateNeckByPoint_index"
+        text.id = 2 * index + 1
+        text.type = Marker.TEXT_VIEW_FACING
+        text.action = Marker.ADD
+        text.pose.position.x = point.x
+        text.pose.position.y = point.y
+        text.pose.position.z = point.z + 0.12
+        text.pose.orientation.w = 1.0
+        text.scale.z = 0.1
+        text.color.r = 1.0
+        text.color.g = 1.0
+        text.color.b = 1.0
+        text.color.a = 1.0
+        text.text = str(index)
+        text.lifetime = marker_lifetime
+
+        self.pub_lookat_point_marker.publish(MarkerArray(markers=[sphere, text]))
 
     def updateNeck(self, data:list[float], from_updateNeckCallback = False) -> None:
         """
