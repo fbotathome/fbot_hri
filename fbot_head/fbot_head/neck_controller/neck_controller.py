@@ -50,7 +50,7 @@ class NeckController(Node):
         }
 
         self.vel_limit = 800
-        self.neck_port = "/dev/ttyNECK"
+        self.neck_port = "/dev/ttyDXL"
         self.motors: dict[str, JointProtocol2] = {}
         self.neck_comm = None
         try:
@@ -247,6 +247,7 @@ class NeckController(Node):
                 self.current_angle = data
 
             self.updateJointsDict()
+            self.get_logger().warn(f"UpdatedNeck to: {data}")
 
 
     def updateJointsDict(self) -> None:
@@ -312,8 +313,9 @@ class NeckController(Node):
         """
         horizontal = math.pi + math.atan2(point.y, point.x)
         dist = np.hypot(point.x, point.y)
-        z = point.z if not self.look_at_topic or 'tracking' not in self.look_at_topic else 0.15
-        z = z if dist > 1.7 else z + 1.2
+        z = point.z
+        if 'tracking' in self.look_at_topic:
+            z = 0.15 if dist > 1.7 else 1.2
         vertical = math.pi + math.atan2(z, dist) #ajuste vertical 
         return [math.degrees(horizontal), math.degrees(vertical)]
 
@@ -323,7 +325,8 @@ class NeckController(Node):
         @param req: (std_srvs.srv.Empty.Request) The service request.
         """
         self.lookat_description_identifier = {'global_id': req.global_id, 'id': req.id, 'label': req.label}
-        self.initial_angle = list(req.initial_angle)
+        self.lookat_initial_angle = list(req.initial_angle)
+        self.updateNeck(self.lookat_initial_angle)
         self.sub_lookat = self.create_subscription(Detection3DArray, req.recognitions3d_topic, self.lookAtRecogCallback, 10)
         self.look_at_topic = req.recognitions3d_topic
         self.last_pose  = None
@@ -399,7 +402,7 @@ class NeckController(Node):
         """
         self.get_logger().info(
             f"lookAt timed out after {self.look_at_timeout:.0f}s, returning to initial angle.")
-        self.updateNeck(data=self.initial_angle)
+        self.updateNeck(data=self.lookat_initial_angle)
 
     def getCloserDescription(self, descriptions):
         """
