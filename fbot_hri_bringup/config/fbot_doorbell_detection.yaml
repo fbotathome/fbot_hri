@@ -1,0 +1,11 @@
+doorbell_detector_node:
+  ros__parameters:
+    fbot_doorbell_detection:
+      sample_path: "/home/fbot/fbot_ws/src/fbot_hri/fbot_speech/resources/doorbell_dingdong.wav" # Absolute path to the reference doorbell .wav sample
+      sample_rate: 16000
+      n_mfcc: 20
+      threshold: 0.85 # Cosine similarity threshold within [0, 1]
+      cooldown: 20 # Listening loops to skip after a detection
+    publishers:
+      fbot_doorbell_detection:
+        topic: "/fbot_speech/doorbell/detected"
