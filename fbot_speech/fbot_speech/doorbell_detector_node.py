@@ -11,9 +11,10 @@ from speech_plugins.detect_doorbell import DetectDoorbell
 class DoorbellDetectorNode(Node):
     """
     @brief ROS node that detects a doorbell sound through the microphone.
-    A reference doorbell audio sample is provided by parameter. The node
-    continuously listens to the microphone and, whenever the incoming audio
-    matches the reference sample, it publishes a message on the detection topic.
+    One or more reference doorbell audio samples are provided by parameter. The
+    node continuously listens to the microphone and, whenever the incoming audio
+    matches any of the reference samples, it publishes a message on the
+    detection topic.
     """
 
     def __init__(self):
@@ -28,12 +29,17 @@ class DoorbellDetectorNode(Node):
         self.readParameters()
         self.initRosComm()
 
-        if not os.path.isfile(self.sample_path):
-            self.get_logger().error(f"Doorbell sample not found: {self.sample_path}")
-            raise FileNotFoundError(self.sample_path)
+        if not self.sample_paths:
+            self.get_logger().error("No doorbell samples were provided.")
+            raise ValueError("fbot_doorbell_detection.sample_paths is empty")
+
+        for path in self.sample_paths:
+            if not os.path.isfile(path):
+                self.get_logger().error(f"Doorbell sample not found: {path}")
+                raise FileNotFoundError(path)
 
         self.detector = DetectDoorbell(
-            sample_path=self.sample_path,
+            sample_paths=self.sample_paths,
             sample_rate=self.sample_rate,
             n_mfcc=self.n_mfcc,
             threshold=self.threshold)
@@ -46,18 +52,18 @@ class DoorbellDetectorNode(Node):
         cooldown_loops = 0
 
         while rclpy.ok():
-            similarity = self.detector.process()
+            name, similarity = self.detector.process()
             if cooldown_loops > 0:
                 cooldown_loops -= 1
                 continue
             if self.detector.is_detected(similarity):
                 self.get_logger().warn(
-                    f"Doorbell detected! (similarity: {similarity:.2f})")
+                    f"Doorbell detected: '{name}' (similarity: {similarity:.2f})")
                 self.doorbell_publisher.publish(Bool(data=True))
                 cooldown_loops = self.cooldown
             else:
                 self.get_logger().error(
-                    f"Doorbell not detected (similarity: {similarity:.2f})")
+                    f"Doorbell not detected (best similarity: {similarity:.2f})")
 
     def initRosComm(self):
         """
@@ -70,7 +76,7 @@ class DoorbellDetectorNode(Node):
         """
         @brief Declare parameters for the node.
         """
-        self.declare_parameter('fbot_doorbell_detection.sample_path', '')
+        self.declare_parameter('fbot_doorbell_detection.sample_paths', rclpy.Parameter.Type.STRING_ARRAY)
         self.declare_parameter('fbot_doorbell_detection.sample_rate', 16000)
         self.declare_parameter('fbot_doorbell_detection.n_mfcc', 20)
         self.declare_parameter('fbot_doorbell_detection.threshold', 0.85)
@@ -81,7 +87,7 @@ class DoorbellDetectorNode(Node):
         """
         @brief Read parameters from the ROS parameter server.
         """
-        self.sample_path = self.get_parameter('fbot_doorbell_detection.sample_path').get_parameter_value().string_value
+        self.sample_paths = list(self.get_parameter('fbot_doorbell_detection.sample_paths').get_parameter_value().string_array_value)
         self.sample_rate = self.get_parameter('fbot_doorbell_detection.sample_rate').get_parameter_value().integer_value
         self.n_mfcc = self.get_parameter('fbot_doorbell_detection.n_mfcc').get_parameter_value().integer_value
         self.threshold = self.get_parameter('fbot_doorbell_detection.threshold').get_parameter_value().double_value

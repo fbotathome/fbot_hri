@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import os
 import numpy as np
 import librosa
 import pyaudio
@@ -7,43 +8,57 @@ import pyaudio
 class DetectDoorbell():
     """
     @brief Class for detecting a doorbell sound using MFCC template matching.
-    This class loads a reference doorbell audio sample and extracts an MFCC
-    based fingerprint from it. It then continuously reads audio from the
-    microphone, keeps a rolling buffer with the same duration as the reference
-    sample, and compares the fingerprint of the buffer with the reference one
-    using cosine similarity. When the similarity is above a threshold the
-    doorbell is considered detected.
+    This class loads one or more reference doorbell audio samples and extracts
+    an MFCC based fingerprint from each of them. It then continuously reads
+    audio from the microphone, keeps a rolling buffer as long as the longest
+    reference sample, and compares the fingerprint of the matching-length
+    window with every reference fingerprint using cosine similarity. When the
+    similarity of any reference is above a threshold the doorbell is considered
+    detected.
     """
 
     def __init__(self,
-                 sample_path: str,
+                 sample_paths,
                  sample_rate: int = 16000,
                  n_mfcc: int = 20,
                  threshold: float = 0.85,
                  frame_length: int = 2048):
         """
         @brief Initialize the doorbell detector.
-        @param sample_path: Path to the reference doorbell audio file (.wav).
+        @param sample_paths: Path (str) or list of paths to the reference
+        doorbell audio files (.wav). Any of them triggers a detection.
         @param sample_rate: Sample rate used to process the audio (Hz).
         @param n_mfcc: Number of MFCC coefficients used to build the fingerprint.
         @param threshold: Cosine similarity threshold within [0, 1]. A higher
         value results in fewer false alarms at the cost of more misses.
         @param frame_length: Number of samples read from the microphone per chunk.
         """
+        if isinstance(sample_paths, str):
+            sample_paths = [sample_paths]
+
         self.sample_rate = sample_rate
         self.n_mfcc = n_mfcc
         self.threshold = threshold
         self.frame_length = frame_length
 
-        # Load the reference sample and build its fingerprint.
-        reference, _ = librosa.load(sample_path, sr=self.sample_rate, mono=True)
-        self.reference_duration = len(reference) / float(self.sample_rate)
-        self.buffer_size = max(len(reference), self.frame_length)
-        self.reference_fingerprint = self._fingerprint(reference)
-        # Reference energy is used to gate detection when the mic is (almost) silent.
-        self.reference_energy = float(np.sqrt(np.mean(reference ** 2)))
+        # One entry per reference sample with its name, window length,
+        # fingerprint and RMS energy (used to gate near-silence).
+        self.references = []
+        for path in sample_paths:
+            signal, _ = librosa.load(path, sr=self.sample_rate, mono=True)
+            self.references.append({
+                'name': os.path.splitext(os.path.basename(path))[0],
+                'length': len(signal),
+                'fingerprint': self._fingerprint(signal),
+                'energy': float(np.sqrt(np.mean(signal ** 2))),
+            })
 
-        # Rolling buffer of microphone samples (float32 in [-1, 1]).
+        if not self.references:
+            raise ValueError("At least one doorbell sample must be provided.")
+
+        # Rolling buffer sized to the longest reference sample.
+        self.buffer_size = max(self.frame_length,
+                               max(ref['length'] for ref in self.references))
         self.buffer = np.zeros(self.buffer_size, dtype=np.float32)
 
         self.pa = None
@@ -77,16 +92,18 @@ class DetectDoorbell():
             input=True,
             frames_per_buffer=self.frame_length)
 
-    def process(self) -> float:
+    def process(self):
         """
-        @brief Read a chunk of audio and check for the doorbell.
+        @brief Read a chunk of audio and check for any of the doorbell samples.
         Reads one chunk from the microphone, appends it to the rolling buffer
-        and compares the buffer fingerprint with the reference one.
-        @return: Cosine similarity in [0, 1] between the current buffer and the
-        reference sample, or -1.0 if the microphone is not initialized.
+        and compares, for each reference, the fingerprint of the matching-length
+        window with the reference fingerprint.
+        @return: Tuple (name, similarity) of the best matching reference, where
+        similarity is the cosine similarity in [0, 1]. Returns (None, -1.0) if
+        the microphone is not initialized.
         """
         if self.mic is None:
-            return -1.0
+            return None, -1.0
 
         pcm = self.mic.read(self.frame_length, exception_on_overflow=False)
         samples = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
@@ -95,14 +112,23 @@ class DetectDoorbell():
         self.buffer = np.roll(self.buffer, -len(samples))
         self.buffer[-len(samples):] = samples
 
-        # Ignore near-silence to avoid matching background noise.
-        energy = float(np.sqrt(np.mean(self.buffer ** 2)))
-        if energy < 0.1 * self.reference_energy:
-            return 0.0
+        best_name = None
+        best_similarity = 0.0
+        for ref in self.references:
+            window = self.buffer[-ref['length']:]
 
-        fingerprint = self._fingerprint(self.buffer)
-        similarity = float(np.dot(fingerprint, self.reference_fingerprint))
-        return similarity
+            # Ignore near-silence to avoid matching background noise.
+            energy = float(np.sqrt(np.mean(window ** 2)))
+            if energy < 0.1 * ref['energy']:
+                continue
+
+            fingerprint = self._fingerprint(window)
+            similarity = float(np.dot(fingerprint, ref['fingerprint']))
+            if similarity > best_similarity:
+                best_similarity = similarity
+                best_name = ref['name']
+
+        return best_name, best_similarity
 
     def is_detected(self, similarity: float) -> bool:
         """
