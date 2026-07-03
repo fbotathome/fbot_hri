@@ -37,7 +37,7 @@ class NeckController(Node):
                 'current_angle': np.pi,
                 'id': 61,
                 'min_angle': 150,
-                'max_angle': 210
+                'max_angle': 200
             },
             'head_pan_joint':{
                 'current_angle': np.pi,
@@ -96,7 +96,7 @@ class NeckController(Node):
         self.lookatplace_timer = None
         self.lookatplace_timeout_timer = None
         self.lookatplace_initial_angle = None
-        self.lookatplace_default_rate = 10.0
+        self.lookatplace_default_rate = 5.0
 
         self.sub_lookat = None
         self.lookat_description_identifier: dict = None
@@ -408,7 +408,7 @@ class NeckController(Node):
                 if distance < max(1.5 * delta, 1.5):
                     lookat_neck = self.computeNeckStateByPoint(ps)
                     self.last_pose = deepcopy(ps)
-                    if abs(lookat_neck[0] - self.current_angle[0] + lookat_neck[1] - self.current_angle[1]) > 1.5:
+                    if abs(lookat_neck[0] - self.current_angle[0]) > 1.0 or abs(lookat_neck[1] - self.current_angle[1]) > 1.0:
                         self.updateNeck(lookat_neck)
 
                 self.last_pose_time = time
