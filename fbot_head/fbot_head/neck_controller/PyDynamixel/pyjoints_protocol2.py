@@ -8,10 +8,11 @@ import dynamixel_sdk as dxl
 #sys.path.append('/home/rich/catkin_ws/src/butia_face/src/PyDynamixel/dynamixel')
 #import dynamixel_functions as dxl
 
-ADDR_MX_TORQUE_ENABLE = 64  
-ADDR_MX_PRESENT_POSITION = 132 
-ADDR_MX_PRESENT_VELOCITY = 128 
-ADDR_MX_GOAL_POSITION = 116 
+ADDR_MX_TORQUE_ENABLE = 64
+ADDR_MX_PRESENT_POSITION = 132
+LEN_MX_PRESENT_POSITION = 4
+ADDR_MX_PRESENT_VELOCITY = 128
+ADDR_MX_GOAL_POSITION = 116
 ADDR_PROFILE_VELOCITY = 112
 # MAXADDR_MX_TORQUE_ENABLE = 0x0E # Address for maximum torque
 # MAXTORQUELIMIT = 767 # Maximum torque possible
@@ -122,13 +123,31 @@ class DxlCommProtocol2(object):
 
     def receiveCurrAngles(self):
 
-        ''' This method read the current angle
-        of all servos attached to this channel
-        (This is sequential, not sync_read!)
+        ''' This method reads the current angle of every servo attached
+        to this channel in a single Sync Read transaction (one request/
+        response round trip for all servos), instead of one sequential
+        Tx/Rx pair per joint. Each joint's currAngle/currValue is updated
+        in place. Returns True on success, False if the sync read failed.
         '''
 
+        sync_read = dxl.GroupSyncRead(self.socket, self.pack_handler, ADDR_MX_PRESENT_POSITION, LEN_MX_PRESENT_POSITION)
         for joint in self.joints:
-            joint.receiveCurrAngle()
+            sync_read.addParam(joint.servo_id)
+
+        comm_result = sync_read.txRxPacket()
+        if comm_result != COMM_SUCCESS:
+            print(f"Sync read failed: {self.pack_handler.getTxRxResult(comm_result)}")
+            sync_read.clearParam()
+            return False
+
+        for joint in self.joints:
+            if sync_read.isAvailable(joint.servo_id, ADDR_MX_PRESENT_POSITION, LEN_MX_PRESENT_POSITION):
+                value = sync_read.getData(joint.servo_id, ADDR_MX_PRESENT_POSITION, LEN_MX_PRESENT_POSITION)
+                joint.currValue = value - joint.centerValue
+                joint.currAngle = pi*float(joint.currValue)/2048.0
+
+        sync_read.clearParam()
+        return True
 
 class JointProtocol2(object):
 

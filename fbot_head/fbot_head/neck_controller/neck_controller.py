@@ -94,7 +94,13 @@ class NeckController(Node):
         self.current_angle = [0.0, 0.0]
         self.initial_angle = [180.0, 180.0]
         self.updateNeck(self.initial_angle)
-        self.joints_publish_timer = self.create_timer(5, self.updateJointsDict)
+
+        self.joint_state_rate = 30.0
+        self.joints_publish_timer = self.create_timer(1.0 / self.joint_state_rate, self.updateJointsDict)
+
+        self.get_logger().info(
+            f"NeckController ready: {len(self.motors)} motors on {self.neck_port}, "
+            f"paused={self.pause}.")
 
     def setupMotors(self) -> None:
         """
@@ -169,24 +175,29 @@ class NeckController(Node):
                 self.motors[key].sendGoalAngle(self.motors_config[key]['current_angle'])
                 self.current_angle = data
 
-            self.updateJointsDict()
+            self.get_logger().warn(f"UpdatedNeck to: {data}")
 
 
     def updateJointsDict(self) -> None:
         """
-        @brief Updates the joint state dictionary and publishes the joint states.
+        @brief Reads all motor angles in a single sync-read transaction, then
+               updates the joint state dictionary and publishes the joint states.
         """
+        if not self.neck_comm.receiveCurrAngles():
+            self.get_logger().warn("Skipping joint_states publish: sync read failed.")
+            return
+
         msg = JointState()
 
         msg.header.stamp = self.get_clock().now().to_msg()
-        
+
         msg.name = []
         msg.position = []
         msg.velocity = []
         msg.effort = []
 
         for key in self.joints_dict:
-            position = self.motors[key].receiveCurrAngle() - np.pi
+            position = self.motors[key].getAngle() - np.pi
             if key=='vertical_neck_joint': position = -(position)
             self.joints_dict[key] = (position, 0., 0.)
 
