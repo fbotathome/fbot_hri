@@ -8,7 +8,7 @@ detector_hotword_node:
   ros__parameters:
     fbot_hotword_detection:
       sensibility: 0.7
-      words: ['Hello Boris;hello_boris.onnx', 'Follow me;follow_me.onnx']
+      words: ['Hello Boris;hello_boris.onnx', 'Follow me;follow_me.onnx', 'Its right;its_right.onnx', 'Its wrong;its_wrong.onnx']
 
 # detector_hotword_node:
 #   ros__parameters:
