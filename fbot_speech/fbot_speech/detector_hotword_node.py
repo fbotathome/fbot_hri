@@ -53,7 +53,9 @@ class HotwordDetectorNode(Node):
         """
         self.declare_parameter('fbot_hotword_detection.sensibility', 0.5)
         self.declare_parameter('publishers.fbot_hotword_detection.topic', '/fbot_speech/bhd/detected')
-        self.declare_parameter('fbot_hotword_detection.words', rclpy.Parameter.Type.STRING_ARRAY)
+        #self.declare_parameter('fbot_hotword_detection.words', rclpy.Parameter.Type.STRING_ARRAY)
+        self.declare_parameter('fbot_hotword_detection.words',['Hello Boris;hello_boris.onnx','Follow me;follow_me.onnx'])
+        #self.declare_parameter('fbot_hotword_detection.words', ['Hello Boris;hello_boris.onnx','Follow me;follow_me.onnx',"It's right;its_right.onnx","It's wrong;its_wrong.onnx"])
 
     def readParameters(self):
         """

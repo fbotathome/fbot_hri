@@ -1,10 +1,13 @@
 # -*- coding: utf-8 -*-
+from operator import index
 import struct
+import numpy as np
 import pyaudio
-import pvporcupine
+#import pvporcupine
+from openwakeword.model import Model
 
 #access_key="Tbyk0dhsux2oYz/+GO8IGk05dCGmhTVze760CdDlA/vfLjkuGCqdRQ==" 
-access_key = "IOI/v3Jkh0zwgEL5MEC2I0Dn/BVDZ8zfcQdFJhiYntRGFLf37F2gqw=="
+#access_key = "IOI/v3Jkh0zwgEL5MEC2I0Dn/BVDZ8zfcQdFJhiYntRGFLf37F2gqw=="
 
 class DetectHotWord():
     """
@@ -25,8 +28,14 @@ class DetectHotWord():
         @param library_path: Path to the Porcupine library (optional).
         @param model_path: Path to the Porcupine model (optional).
         """
-        self.handle = pvporcupine.create(access_key=access_key, keyword_paths=keyword_path, sensitivities=sensitivity)
+        #self.handle = pvporcupine.create(access_key=access_key, keyword_paths=keyword_path, sensitivities=sensitivity)
         self.mic = None
+        self.handle = Model(wakeword_model_paths=keyword_path)
+        self.sensitivity = sensitivity
+        self.sample_rate = 16000
+        self.frame_length = int(self.sample_rate * 0.08)
+
+        
 
     def hear(self):
         """
@@ -35,11 +44,11 @@ class DetectHotWord():
         """
         self.pa = pyaudio.PyAudio()
         audio_stream = self.pa.open(
-            rate=self.handle.sample_rate,
+            rate=self.sample_rate,
             channels=1,
             format=pyaudio.paInt16,
             input=True,
-            frames_per_buffer=self.handle.frame_length)
+            frames_per_buffer=self.frame_length)
         self.mic = audio_stream
 
     def process(self):
@@ -50,13 +59,29 @@ class DetectHotWord():
         If no hotword is detected, it returns -1.
         """
         if self.mic is not None:
-            pcm = self.mic.read(self.handle.frame_length)
-            pcm = struct.unpack_from("h" * self.handle.frame_length, pcm)
-            recorded_frames = []
-            recorded_frames.append(pcm)
-            result = self.handle.process(pcm)
-            return result #Return an integer representing the index of the hotword detected, from zero.
+            pcm = self.mic.read(self.frame_length, exception_on_overflow=False)
+            pcm = np.frombuffer(pcm,dtype=np.int16)
+            prediction = self.handle.predict(pcm)
+
+            # Check the predictions
+            for index, keyword in enumerate(self.handle.models.keys()):
+                score = prediction.get(keyword, 0)
+                if score >= self.sensitivity[index]:
+                    return index #Return an integer representing the index of the hotword detected, from zero.
         return -1
+
+    # def process(self):
+    #     if self.mic is not None:
+    #         pcm = self.mic.read(self.frame_length, exception_on_overflow=False)
+    #         pcm = np.frombuffer(pcm, dtype=np.int16)
+    #         prediction = self.handle.predict(pcm)
+
+    #         for index, keyword in enumerate(self.handle.models.keys()):
+    #             score = prediction.get(keyword, 0)
+    #             print(f"[DEBUG] max_amp={np.abs(pcm).max()} {keyword}={score:.4f}")
+    #             if score >= self.sensitivity[index]:
+    #                 return index
+    #     return -1
 
     def __del__(self):
         """
@@ -65,6 +90,11 @@ class DetectHotWord():
         """
         self.mic.close()
         self.pa.terminate()
-        self.handle.delete()
 
-    
+    # def __del__(self):
+    #     try:
+    #         if self.mic is not None:
+    #             self.mic.stop()
+    #             self.mic.close()
+    #     except Exception:
+    #         pass
