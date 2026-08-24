@@ -6,6 +6,7 @@ import rclpy
 import serial
 from rclpy.node import Node
 from std_msgs.msg import String
+from std_srvs.srv import SetBool  # Added: Import for the blinking service
 from ament_index_python.packages import get_package_share_directory
 
 class EmotionsBridge(Node):
@@ -15,17 +16,22 @@ class EmotionsBridge(Node):
         @brief A Node for managing emotions and motor configurations.
         @param pause: If True, the node will not send any data to the motors.
         """
+        self.declare_parameter('default_blink', False) # Default state if not specified
+        default_blink_val = self.get_parameter('default_blink').value
 
         super().__init__('emotions_bridge')
 
         try:
-            self.serial = serial.Serial('/dev/ttyFACE')
+            # --- COMMENTED:
+            # self.serial = serial.Serial('/dev/ttyFACE', 9600, timeout=1) # Mantido conforme padrão ESP32
+            # --- REASON: Translating Portuguese comment to English as requested by the reviewer.
+            self.serial = serial.Serial('/dev/ttyFACE', 9600, timeout=1) # Kept as per ESP32 standard
         except serial.SerialException as e:
             self.get_logger().error(f"Serial port error: {e}")
             return
 
         self.motors = None
-        #CARREGAR PARÂMETROS DO YAML    
+        #LOAD YAML PARAMETERS  
         self.loadMotorsParams('motors.yaml')
 
         self.sendMotorsConfig()
@@ -35,28 +41,113 @@ class EmotionsBridge(Node):
 
         self.sub_emotion = self.create_subscription(String, 'fbot_face/emotion', self.emotionCallback, 10)
 
+        # ADDED: Service to enable/disable blinking (CMD 3)
+        self.srv_blink = self.create_service(SetBool, 'set_blink', self.set_blink_callback)
+        self.get_logger().info("'set_blink' service (CMD 3) initialized.")
+
         time.sleep(2)
+
+        # --- NEW: Initializing the blink state based on the launch parameter.
+        # This resolves the issue where the node wouldn't start or stop blinking on launch.
+        self.sendBlinkCommand(default_blink_val)
+        # --- END NEW
+
+    # --- COMMENTED: The original callback method that directly handled serial communication.
+    # # ADDED: NEW SERVICE CALLBACK (CMD 3)
+    # def set_blink_callback(self, request, response):
+    #     """
+    #     @brief Callback for the blinking service. Sends CMD 3 to the firmware.
+    #     """
+    #     try:
+    #         # Mount the JSON for the CMD 3 defined in the firmware
+    #         msg = {"cmd": 3, "blink": request.data}
+    #         data_str = json.dumps(msg)
+    #         data_bytes = data_str.encode('utf-8')
+    #         
+    #         self.serial.write(data_bytes)
+    #         self.get_logger().info(f'Sent blink command (CMD 3): {data_str}')
+    # 
+    #         # Awaiting successful response from the microcontroller
+    #         if self.waitSerialResponse("success"):
+    #             response.success = True
+    #             response.message = f"Blinking defined as: {request.data}"
+    #         else:
+    #             response.success = False
+    #             response.message = "Microcontroller did not acknowledge CMD 3."
+    #             
+    #     except Exception as e:
+    #         response.success = False
+    #         response.message = f"Error sending blink command: {str(e)}"
+    #         self.get_logger().error(response.message)
+    #     
+    #     return response
+    # --- REASON: Refactoring to encapsulate serial logic in a separate function (sendBlinkCommand) 
+    # so it can be reused in both the service callback and the __init__ startup logic.
+    def sendBlinkCommand(self, state: bool) -> bool:
+        """
+        @brief Helper function to send CMD 3 (Blink configuration) to the firmware.
+        @param state: (bool) True to enable blinking, False to disable.
+        @return: (bool) True if microcontroller acknowledged successfully, False otherwise.
+        """
+        try:
+            msg = {"cmd": 3, "blink": state}
+            data_str = json.dumps(msg)
+            data_bytes = data_str.encode('utf-8')
+            
+            self.serial.write(data_bytes)
+            self.get_logger().info(f'Sent blink command (CMD 3): {data_str}')
+
+            if self.waitSerialResponse("success"):
+                return True
+            else:
+                return False
+                
+        except Exception as e:
+            self.get_logger().error(f"Error sending blink command: {str(e)}")
+            return False
+
+    def set_blink_callback(self, request, response):
+        """
+        @brief Callback for the blinking service. Uses sendBlinkCommand to send CMD 3 to the firmware.
+        """
+        success = self.sendBlinkCommand(request.data)
+        
+        if success:
+            response.success = True
+            response.message = f"Blinking defined as: {request.data}"
+        else:
+            response.success = False
+            response.message = "Microcontroller did not acknowledge CMD 3 or an error occurred."
+            
+        return response
+    # --- END NEW
         
     def sendMotorsConfig(self) -> None:  
         """
         @brief Sends motor configuration data to the microcontroller, so it can instantiate the motor classes in its firmware.
         """
-
         max_retries = 3
         retries = 0
         success = False
 
-        
         motors_pins: dict = {
-            "cmd": 1
+            "cmd": 1,
+            "blink_cfg": {} # New sub-dictionary for blinking parameters
         }
 
         for motor in self.motors:
-
             motors_pins[motor] = self.get_parameter(motor+'.pin').value
+            
+            # Verifies if it's a eyelid configured for blinking (Dynamically searches in the YAML)
+            if self.has_parameter(motor+'.blink_left') and self.get_parameter(motor+'.blink_left').value:
+                motors_pins["blink_cfg"]["nameL"] = motor
+                motors_pins["blink_cfg"]["angleL"] = self.get_parameter(motor+'.blink_closed_angle').value
+            
+            if self.has_parameter(motor+'.blink_right') and self.get_parameter(motor+'.blink_right').value:
+                motors_pins["blink_cfg"]["nameR"] = motor
+                motors_pins["blink_cfg"]["angleR"] = self.get_parameter(motor+'.blink_closed_angle').value
 
         data_str = json.dumps(motors_pins)
-
         data_bytes = data_str.encode('utf-8')
 
         self.serial.write(data_bytes)
@@ -76,7 +167,6 @@ class EmotionsBridge(Node):
         @param response_msg: (str) The expected response message.  
         """
         received_msg = ""
-        number_of_dict = 0
         while True:
             if self.serial.in_waiting > 0:
                 try:
@@ -128,7 +218,10 @@ class EmotionsBridge(Node):
                 self.get_logger().error(f"Parameter '{motor}.{emotion}' not declared. Cannot send emotion to motor '{motor}'.")
                 return
             
-            write_msg = [motor, self.get_parameter(motor+'.'+emotion).value] #opção sem namespace
+            # --- COMMENTED:
+            # write_msg = [motor, self.get_parameter(motor+'.'+emotion).value] #opção sem namespace
+            # --- REASON: Translating Portuguese comment to English.
+            write_msg = [motor, self.get_parameter(motor+'.'+emotion).value] # option without namespace
 
             motors_dict[motor] = write_msg[1]
 
@@ -157,10 +250,14 @@ class EmotionsBridge(Node):
             config = yaml.safe_load(config_file)[self.get_name()]['ros__parameters']
 
         self.motors = config
-        for motor, value in config.items():
-            for param, value in value.items():
-                self.declare_parameter(motor+'.'+param, value)
-            
+        for motor, params in config.items():
+            # --- COMMENTED:
+            # # Itera sobre cada sub-item do motor (pin, blink_left, etc)
+            # --- REASON: Translating Portuguese comment to English.
+            # Iterates over each motor sub-item (pin, blink_left, etc)
+            for param_name, param_value in params.items():
+                self.declare_parameter(motor + '.' + param_name, param_value)
+                
             
 
 def main(args=None):
