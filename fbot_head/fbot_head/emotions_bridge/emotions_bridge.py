@@ -22,7 +22,10 @@ class EmotionsBridge(Node):
         super().__init__('emotions_bridge')
 
         try:
-            self.serial = serial.Serial('/dev/ttyFACE', 9600, timeout=1) # Mantido conforme padrão ESP32
+            # --- COMMENTED:
+            # self.serial = serial.Serial('/dev/ttyFACE', 9600, timeout=1) # Mantido conforme padrão ESP32
+            # --- REASON: Translating Portuguese comment to English as requested by the reviewer.
+            self.serial = serial.Serial('/dev/ttyFACE', 9600, timeout=1) # Kept as per ESP32 standard
         except serial.SerialException as e:
             self.get_logger().error(f"Serial port error: {e}")
             return
@@ -40,38 +43,84 @@ class EmotionsBridge(Node):
 
         # ADDED: Service to enable/disable blinking (CMD 3)
         self.srv_blink = self.create_service(SetBool, 'set_blink', self.set_blink_callback)
-        self.get_logger().info("Serviço 'set_blink' (CMD 3) inicializado.")
+        self.get_logger().info("'set_blink' service (CMD 3) initialized.")
 
         time.sleep(2)
 
-    # ADDED: NEW SERVICE CALLBACK (CMD 3)
-    def set_blink_callback(self, request, response):
+        # --- NEW: Initializing the blink state based on the launch parameter.
+        # This resolves the issue where the node wouldn't start or stop blinking on launch.
+        self.sendBlinkCommand(default_blink_val)
+        # --- END NEW
+
+    # --- COMMENTED: The original callback method that directly handled serial communication.
+    # # ADDED: NEW SERVICE CALLBACK (CMD 3)
+    # def set_blink_callback(self, request, response):
+    #     """
+    #     @brief Callback for the blinking service. Sends CMD 3 to the firmware.
+    #     """
+    #     try:
+    #         # Mount the JSON for the CMD 3 defined in the firmware
+    #         msg = {"cmd": 3, "blink": request.data}
+    #         data_str = json.dumps(msg)
+    #         data_bytes = data_str.encode('utf-8')
+    #         
+    #         self.serial.write(data_bytes)
+    #         self.get_logger().info(f'Sent blink command (CMD 3): {data_str}')
+    # 
+    #         # Awaiting successful response from the microcontroller
+    #         if self.waitSerialResponse("success"):
+    #             response.success = True
+    #             response.message = f"Blinking defined as: {request.data}"
+    #         else:
+    #             response.success = False
+    #             response.message = "Microcontroller did not acknowledge CMD 3."
+    #             
+    #     except Exception as e:
+    #         response.success = False
+    #         response.message = f"Error sending blink command: {str(e)}"
+    #         self.get_logger().error(response.message)
+    #     
+    #     return response
+    # --- REASON: Refactoring to encapsulate serial logic in a separate function (sendBlinkCommand) 
+    # so it can be reused in both the service callback and the __init__ startup logic.
+    def sendBlinkCommand(self, state: bool) -> bool:
         """
-        @brief Callback for the blinking service. Sends CMD 3 to the firmware.
+        @brief Helper function to send CMD 3 (Blink configuration) to the firmware.
+        @param state: (bool) True to enable blinking, False to disable.
+        @return: (bool) True if microcontroller acknowledged successfully, False otherwise.
         """
         try:
-            # Mount the JSON for the CMD 3 defined in the firmware
-            msg = {"cmd": 3, "blink": request.data}
+            msg = {"cmd": 3, "blink": state}
             data_str = json.dumps(msg)
             data_bytes = data_str.encode('utf-8')
             
             self.serial.write(data_bytes)
             self.get_logger().info(f'Sent blink command (CMD 3): {data_str}')
 
-            # Awaiting successful response from the microcontroller
             if self.waitSerialResponse("success"):
-                response.success = True
-                response.message = f"Piscagem definida como: {request.data}"
+                return True
             else:
-                response.success = False
-                response.message = "Microcontrolador não confirmou CMD 3"
+                return False
                 
         except Exception as e:
-            response.success = False
-            response.message = f"Erro ao enviar comando de piscagem: {str(e)}"
-            self.get_logger().error(response.message)
+            self.get_logger().error(f"Error sending blink command: {str(e)}")
+            return False
+
+    def set_blink_callback(self, request, response):
+        """
+        @brief Callback for the blinking service. Uses sendBlinkCommand to send CMD 3 to the firmware.
+        """
+        success = self.sendBlinkCommand(request.data)
         
+        if success:
+            response.success = True
+            response.message = f"Blinking defined as: {request.data}"
+        else:
+            response.success = False
+            response.message = "Microcontroller did not acknowledge CMD 3 or an error occurred."
+            
         return response
+    # --- END NEW
         
     def sendMotorsConfig(self) -> None:  
         """
@@ -169,7 +218,10 @@ class EmotionsBridge(Node):
                 self.get_logger().error(f"Parameter '{motor}.{emotion}' not declared. Cannot send emotion to motor '{motor}'.")
                 return
             
-            write_msg = [motor, self.get_parameter(motor+'.'+emotion).value] #opção sem namespace
+            # --- COMMENTED:
+            # write_msg = [motor, self.get_parameter(motor+'.'+emotion).value] #opção sem namespace
+            # --- REASON: Translating Portuguese comment to English.
+            write_msg = [motor, self.get_parameter(motor+'.'+emotion).value] # option without namespace
 
             motors_dict[motor] = write_msg[1]
 
@@ -199,7 +251,10 @@ class EmotionsBridge(Node):
 
         self.motors = config
         for motor, params in config.items():
-            # Itera sobre cada sub-item do motor (pin, blink_left, etc)
+            # --- COMMENTED:
+            # # Itera sobre cada sub-item do motor (pin, blink_left, etc)
+            # --- REASON: Translating Portuguese comment to English.
+            # Iterates over each motor sub-item (pin, blink_left, etc)
             for param_name, param_value in params.items():
                 self.declare_parameter(motor + '.' + param_name, param_value)
                 
