@@ -21,7 +21,7 @@ class DetectDoorbell():
                  sample_paths,
                  sample_rate: int = 16000,
                  n_mfcc: int = 20,
-                 threshold: float = 0.85,
+                 threshold: float = 0.70,
                  frame_length: int = 2048):
         """
         @brief Initialize the doorbell detector.
@@ -119,11 +119,14 @@ class DetectDoorbell():
 
             # Ignore near-silence to avoid matching background noise.
             energy = float(np.sqrt(np.mean(window ** 2)))
-            if energy < 0.1 * ref['energy']:
+            # print(f"Energy: {energy}")
+            # print(f"Ref energy: {ref}")
+            if energy < 0.01 * ref['energy']:
                 continue
 
             fingerprint = self._fingerprint(window)
             similarity = float(np.dot(fingerprint, ref['fingerprint']))
+            print(f"Similarity with {ref['name']}: {best_similarity:.4f}")
             if similarity > best_similarity:
                 best_similarity = similarity
                 best_name = ref['name']

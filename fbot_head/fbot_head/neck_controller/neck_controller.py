@@ -345,6 +345,7 @@ class NeckController(Node):
         """
         self.lookat_description_identifier = {'global_id': req.global_id, 'id': req.id, 'label': req.label}
         self.lookat_initial_angle = list(req.initial_angle)
+        self.lookat_initial_angle = self.lookat_initial_angle if len(self.lookat_initial_angle) == 2 else self.initial_angle
         self.updateNeck(self.lookat_initial_angle)
         self.sub_lookat = self.create_subscription(Detection3DArray, req.recognitions3d_topic, self.lookAtRecogCallback, 10)
         self.look_at_topic = req.recognitions3d_topic
