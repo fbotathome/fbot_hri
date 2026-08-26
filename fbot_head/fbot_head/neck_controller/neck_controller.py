@@ -8,7 +8,7 @@ from rclpy.node import Node
 from rclpy.time import Time
 from std_srvs.srv import Empty
 from sensor_msgs.msg import JointState
-from std_msgs.msg import Bool, Float64MultiArray
+from std_msgs.msg import Bool, Float64MultiArray, Header
 from fbot_vision_msgs.msg import Detection3DArray
 from fbot_vision_msgs.srv import LookAtDescription3D
 from geometry_msgs.msg import PoseStamped, PointStamped
@@ -95,7 +95,7 @@ class NeckController(Node):
         self.initial_angle = [180.0, 180.0]
         self.updateNeck(self.initial_angle)
 
-        self.joint_state_rate = 30.0
+        self.joint_state_rate = 1.0
         self.joints_publish_timer = self.create_timer(1.0 / self.joint_state_rate, self.updateJointsDict)
 
         self.get_logger().info(
@@ -180,24 +180,19 @@ class NeckController(Node):
 
     def updateJointsDict(self) -> None:
         """
-        @brief Reads all motor angles in a single sync-read transaction, then
-               updates the joint state dictionary and publishes the joint states.
+        @brief Updates the joint state dictionary and publishes the joint states.
         """
-        if not self.neck_comm.receiveCurrAngles():
-            self.get_logger().warn("Skipping joint_states publish: sync read failed.")
-            return
-
         msg = JointState()
 
         msg.header.stamp = self.get_clock().now().to_msg()
-
+        
         msg.name = []
         msg.position = []
         msg.velocity = []
         msg.effort = []
 
         for key in self.joints_dict:
-            position = self.motors[key].getAngle() - np.pi
+            position = self.motors[key].receiveCurrAngle() - np.pi
             if key=='vertical_neck_joint': position = -(position)
             self.joints_dict[key] = (position, 0., 0.)
 
@@ -218,7 +213,7 @@ class NeckController(Node):
         else:
             self.last_stopped_time = None
 
-    def computeTFTransform(self, source_header=None, target_frame='camera_link_static', lastest=True):
+    def computeTFTransform(self, source_header=None, target_frame='femtobolt_link_static', lastest=True):
         """
         @brief Computes the transform between two frames.
         @param target_frame: (str) The target frame ID.
@@ -258,7 +253,8 @@ class NeckController(Node):
         self.get_logger().info(f"Starting lookAt service with description: {self.lookat_description_identifier}")
         self.get_logger().info(f"Starting lookAt initial angle: {isinstance(req.initial_angle, list)} -> {req.initial_angle} -> {type(req.initial_angle)}")
         # if isinstance(req.initial_angle, list) and len(req.initial_angle) == 2:
-        self.initial_angle = list(req.initial_angle)
+        self.lookat_initial_angle = list(req.initial_angle)
+        self.lookat_initial_angle = self.lookat_initial_angle if len(self.lookat_initial_angle) == 2 else self.initial_angle
         self.sub_lookat = self.create_subscription(Detection3DArray, req.recognitions3d_topic, self.lookAtRecogCallback, 10)
         self.last_pose  = None
         self.last_pose_time = 0.
@@ -280,7 +276,8 @@ class NeckController(Node):
         selected_desc = self.selectDescription(msg.detections)
 
         if selected_desc is not None:
-            header = selected_desc.header
+            header: Header = selected_desc.header
+            header.stamp.sec +=  2
             if self.last_stopped_time is not None and Time.from_msg(header.stamp) >= Time.from_msg(self.last_stopped_time):
                 transform = self.computeTFTransform(header, self.frame)
 
@@ -324,7 +321,7 @@ class NeckController(Node):
         """
         @brief Callback triggered when the "look at" service times out.
         """
-        self.updateNeck(data=self.initial_angle)
+        self.updateNeck(data=self.lookat_initial_angle)
 
     def getCloserDescription(self, descriptions):
         """
