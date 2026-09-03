@@ -31,7 +31,7 @@ class NeckController(Node):
                 'current_angle': np.pi,
                 'id': 62,
                 'min_angle': 120,
-                'max_angle': 240
+                'max_angle': 200
             },
             'vertical_neck_joint':{
                 'current_angle': np.pi,
