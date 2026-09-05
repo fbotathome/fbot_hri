@@ -28,7 +28,6 @@ setup(
             'speech_synthesizer = fbot_speech.speech_synthesizer:main',
             'speech_recognizer = fbot_speech.speech_recognizer:main',
             'detector_hotword_node = fbot_speech.detector_hotword_node:main',
-            'doorbell_detector_node = fbot_speech.doorbell_detector_node:main',
             'audio_player = fbot_speech.audio_player:main',
             'asr_riva = fbot_speech.speech_recognizer_riva:main',
             ]

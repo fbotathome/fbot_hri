@@ -82,7 +82,7 @@ emotions_bridge:
         final_angle: 150 #tested 
         type: 'percentual'
 
-        neutral: 140 #130
+        neutral: 130 #130
         happy: 150 #ok
         sad: 85 #ok
         surprised: 150 #ok
@@ -97,13 +97,13 @@ emotions_bridge:
         final_angle: 50
         type: 'percentual'
 
-        neutral: 70
-        happy: 70
+        neutral: 50
+        happy: 50
         sad: 100
-        surprised: 70 
-        angry: 70
-        suspicious: 70
-        sleepy: 70
+        surprised: 50 
+        angry: 50
+        suspicious: 50
+        sleepy: 50
 
 
       eyes_hor:
