@@ -2,3 +2,6 @@ sounddevice
 termcolor
 playsound
 realtimeSTT
+librosa
+numpy
+pyaudio
