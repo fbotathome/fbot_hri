@@ -30,10 +30,12 @@ class DetectHotWord():
         """
         #self.handle = pvporcupine.create(access_key=access_key, keyword_paths=keyword_path, sensitivities=sensitivity)
         self.mic = None
-        self.handle = Model(wakeword_model_paths=keyword_path)
+        self.handle = Model(wakeword_models=keyword_path, inference_framework="onnx")
         self.sensitivity = sensitivity
         self.sample_rate = 16000
         self.frame_length = int(self.sample_rate * 0.08)
+        self.cooldown_frames = 25  # ~2s a 80ms/frame, ignora detecções logo após um acerto
+        self.frames_since_detection = self.cooldown_frames
 
         
 
@@ -58,16 +60,23 @@ class DetectHotWord():
         @return: Index of the detected hotword (0 for first hotword, 1 for second hotword, etc.).
         If no hotword is detected, it returns -1.
         """
+
         if self.mic is not None:
             pcm = self.mic.read(self.frame_length, exception_on_overflow=False)
             pcm = np.frombuffer(pcm,dtype=np.int16)
             prediction = self.handle.predict(pcm)
+            self.frames_since_detection += 1
+
+            if self.frames_since_detection < self.cooldown_frames:
+                return -1
 
             # Check the predictions
             for index, keyword in enumerate(self.handle.models.keys()):
                 score = prediction.get(keyword, 0)
                 if score >= self.sensitivity[index]:
-                    return index #Return an integer representing the index of the hotword detected, from zero.
+                    self.frames_since_detection = 0
+                    self.handle.reset()
+                    return index
         return -1
 
     # def process(self):
