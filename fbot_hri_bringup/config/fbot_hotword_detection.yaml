@@ -1,6 +1,22 @@
+# detector_hotword_node:
+#   ros__parameters:
+#     fbot_hotword_detection:
+#       sensibility: 0.7
+#       words: ['Follow me;Follow-me_en_linux_v3_0_0.ppn', 'Hello Boris;Hello-Boris_en_linux_v3_0_0.ppn', "It's right;It--s-right_en_linux_v3_0_0.ppn"]
+        
 detector_hotword_node:
   ros__parameters:
     fbot_hotword_detection:
       sensibility: 0.7
-      words: ['Follow me;Follow-me_en_linux_v3_0_0.ppn', 'Hello Boris;Hello-Boris_en_linux_v3_0_0.ppn', "It's right;It--s-right_en_linux_v3_0_0.ppn"]
-        
+      words: ['Hello Boris;hello_boris.onnx', 'Follow me;follow_me.onnx', 'Its right;its_right.onnx', 'Its wrong;its_wrong.onnx']
+
+# detector_hotword_node:
+#   ros__parameters:
+#     fbot_hotword_detection:
+#       sensibility: 0.7
+#       words: [
+#         'Hello Boris;hello_boris.onnx',
+#         'Follow me;follow_me.onnx',
+#         "It's right;its_right.onnx",
+#         "It's wrong;its_wrong.onnx"
+#       ]
