@@ -17,5 +17,5 @@ neck_controller:
       id: 9
 
     vel_limit: 800
-    neck_port: 'dev/ttyNECK'
+    neck_port: '/dev/ttyNECK'
     baudrate: 57600
