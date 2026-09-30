@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/ev python3
 
 from math import pi
 
@@ -28,7 +28,7 @@ class DxlCommProtocol2(object):
     protocol.
     ''' 
 
-    def __init__(self, commPort="/dev/ttyNECK", baudnum = 1):
+    def __init__(self, commPort: str = "/dev/ttyNECK", baudRate: int = 1000000):
 
         ''' The argument commPort should be
         the path to the serial device.
@@ -40,9 +40,9 @@ class DxlCommProtocol2(object):
         '''
 
         self.commPort = commPort
-        self.baudnum = baudnum
-        self.baudRate = 2000000/(baudnum+1)
+        self.baudRate = baudRate
         self.socket = dxl.PortHandler(self.commPort)
+        self.socket.setBaudRate(self.baudRate)
         self.pack_handler = dxl.PacketHandler(PROTOCOL_VERSION)
 
         try:
@@ -50,7 +50,6 @@ class DxlCommProtocol2(object):
             print("Port Open Success")
         except Exception:
             raise Exception("Port Open Error")
-        
         self.joints = []
         self.joint_ids = []
         self.total = 0

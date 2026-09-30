@@ -15,7 +15,8 @@ def generate_launch_description():
         Node(
             package='fbot_head',
             executable='neck_controller',
-            name='neck_controller'),
+            name='neck_controller',
+            parameters = [motors_config]),
         Node(
             package='fbot_head',
             executable='emotions_bridge',
