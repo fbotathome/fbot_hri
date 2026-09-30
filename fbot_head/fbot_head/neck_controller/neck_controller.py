@@ -134,7 +134,7 @@ class NeckController(Node):
         @brief Initializes the Dynamixel motors, sets up the communication with the motors and configures their torque and velocity limits.
         """
         try:
-            self.neck_comm = DxlCommProtocol2(self.neck_port, self.baudrate)
+            self.neck_comm = DxlCommProtocol2(self.baudrate, self.neck_port)
 
         except Exception as e:
             raise RuntimeError(f"Failed to initialize NeckController: Neck port {self.neck_port} failed to connect. See readme for more details.")

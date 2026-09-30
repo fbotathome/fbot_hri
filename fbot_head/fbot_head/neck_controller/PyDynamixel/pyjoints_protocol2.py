@@ -1,4 +1,4 @@
-#!/usr/bin/ev python3
+#!/usr/bin/env python3
 
 from math import pi
 
@@ -28,15 +28,12 @@ class DxlCommProtocol2(object):
     protocol.
     ''' 
 
-    def __init__(self, commPort: str = "/dev/ttyNECK", baudRate: int = 1000000):
+    def __init__(self, baudRate: int, commPort: str = "/dev/ttyNECK"):
 
-        ''' The argument commPort should be
+        '''The argument baudRate should be the
+        baud rate of the serial device.
+            The argument commPort should be
         the path to the serial device.
-        The constructor optionally takes
-        a baudnum argument:
-           baudrate = 2Mbps / (baudnum + 1)
-        If no baudnum is provided, then the
-        default is 1, resulting 1Mbps
         '''
 
         self.commPort = commPort
