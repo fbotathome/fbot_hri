@@ -1,0 +1,21 @@
+neck_controller:
+  ros__parameters:
+    horizontal_neck_joint:
+      id: 62
+      min_angle: 120
+      max_angle: 240
+
+    vertical_neck_joint:
+      id: 61
+      min_angle: 150
+      max_angle: 190
+
+    head_pan_joint:
+      id: 8
+
+    head_tilt_joint:
+      id: 9
+
+    vel_limit: 800
+    neck_port: 'dev/ttyNECK'
+    baudrate: 57600
