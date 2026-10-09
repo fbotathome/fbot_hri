@@ -115,7 +115,7 @@ class WavToMouth(Node):
             self.sample_rate = self.audio.getframerate()
             self.channels = self.audio.getnchannels()
         elif self.audio_info is not None:
-            self.sample_rate = self.audio_info.rate
+            self.sample_rate = self.audio_info.sample_rate
             self.channels = self.audio_info.channels
 
         self.audio = None

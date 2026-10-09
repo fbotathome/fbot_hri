@@ -61,48 +61,48 @@ class SpeechSynthesizerNode(WavToMouth):
         """
         config = self.configs
         speech = request.text
-        try:
+        # try:
             # Call Riva TTS to synthesize the speech
-            self.resp = self.riva_tts.synthesize(
-                custom_dictionary=config, 
-                text=speech,
-                voice_name=config["voice_name"], 
-                sample_rate_hz=config["sample_rate_hz"],
-                language_code=config["language_code"],
-                encoding=riva.client.AudioEncoding.LINEAR_PCM,
-            )
-            
-            # Convert the response audio to a NumPy array
-            audio_samples = np.frombuffer(self.resp.audio, dtype=np.int16)
-            # Prepare the audio data to send to the audio player
-            audio_data = AudioData()
-            audio_data.uint8_data = audio_samples.tobytes()
-            
-            audio_info = AudioInfo()
-            audio_info.rate = config["sample_rate_hz"]
-            audio_info.channels = 1
-            audio_info.format = 16    
-
-            try:
-                if self.streaming:
-                    response.success = False
-                    return response
-
-                data = audio_data.uint8_data
-                info = audio_info
-                self.setDataAndInfo(data, info)
-
-                while self.playAllData() != True:
-                    continue
-                response.success = self.playAllData()
-                self.get_logger().info(f"AllData: {response}")
-            except:
-                response.success = False
-                self.get_logger().error(f"Error while synthesizing speech voice: {e}")
+        self.resp = self.riva_tts.synthesize(
+            custom_dictionary=config, 
+            text=speech,
+            voice_name=config["voice_name"], 
+            sample_rate_hz=config["sample_rate_hz"],
+            language_code=config["language_code"],
+            encoding=riva.client.AudioEncoding.LINEAR_PCM,
+        )
         
-        except Exception as e:
+        # Convert the response audio to a NumPy array
+        audio_samples = np.frombuffer(self.resp.audio, dtype=np.int16)
+        # Prepare the audio data to send to the audio player
+        audio_data = AudioData()
+        audio_data.data = audio_samples.tobytes()
+        
+        audio_info = AudioInfo()
+        audio_info.sample_rate = config["sample_rate_hz"]
+        audio_info.channels = 1
+        audio_info.sample_format = "S16LE"
+
+        try:
+            if self.streaming:
+                response.success = False
+                return response
+
+            data = audio_data.data
+            info = audio_info
+            self.setDataAndInfo(data, info)
+
+            while self.playAllData() != True:
+                continue
+            response.success = self.playAllData()
+            self.get_logger().info(f"AllData: {response}")
+        except:
             response.success = False
-            self.get_logger().error(f"Error while synthesizing speech: {e}")
+            self.get_logger().error(f"Error while synthesizing speech voice: {e}")
+        
+        # except Exception as e:
+        #     response.success = False
+        #     self.get_logger().error(f"Error while synthesizing speech: {e}")
         
         return response
     
