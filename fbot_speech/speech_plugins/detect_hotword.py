@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
+import os
 import numpy as np
 import pyaudio
-#import pvporcupine
 from openwakeword.model import Model
 
 class DetectHotWord():
@@ -11,25 +11,23 @@ class DetectHotWord():
     It also handles microphone input and processes audio frames to detect hotwords.
     """
     def __init__(self,
-                keyword_path: list[str],
-                sensitivity: float,
-                library_path: str = None,
-                model_path: str = None):
+                keyword_path: str | list[str],
+                sensitivity: float | list[float],
+                framework: str = "onnx"):
         """
         @brief Initialize the hotword detector.
         @param keyword_path: List of paths to the OpenWakeWord models.
         @param sensitivity: List of detection thresholds, one for each model. Each value should be in [0, 1].
-        @param library_path: Unused compatibility parameter for the previous Porcupine implementation.
-        @param model_path: Unused compatibility parameter for the previous Porcupine implementation.
         """
         
         self.mic = None
-        self.handle = Model(wakeword_models=keyword_path, inference_framework="onnx")
+        self.handle = Model(wakeword_models=keyword_path, inference_framework=framework)
         self.sensitivity = sensitivity
         self.sample_rate = 16000
         self.frame_length = int(self.sample_rate * 0.08)
         self.cooldown_frames = 25  # ~2s a 80ms/frame, ignora detecções logo após um acerto
         self.frames_since_detection = self.cooldown_frames
+        self.model_keys = [os.path.splitext(os.path.basename(path))[0] for path in keyword_path]
 
         
 

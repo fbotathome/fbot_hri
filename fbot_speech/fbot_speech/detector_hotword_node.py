@@ -64,10 +64,21 @@ class HotwordDetectorNode(Node):
         self.words = self.get_parameter('fbot_hotword_detection.words').get_parameter_value().string_array_value
         self.keyword = []
         self.keyword_path = []
+        self.sensibilities_list = []
         for word in self.words:
-            index = word.find(';')
-            self.keyword.append(re.sub(r'[^a-z ]', '', word[:index].lower()))
-            self.keyword_path.append(self.pack_dir+'/'+word[index+1:])
+            parts = word.split(';')
+
+            if len(parts) == 3:
+                phrase = re.sub(r'[^a-z ]', '', parts[0].lower())
+                self.keyword.append(phrase)
+                
+                filename = parts[1]
+                self.keyword_path.append(f"{self.pack_dir}/{filename}")
+                
+                sensitivity = float(parts[2])
+                self.sensibilities_list.append(sensitivity)
+            else:
+                self.get_logger().error(f"Erro de formatação no parâmetro words: esperado 'Frase;Arquivo;Sensibilidade', recebido: {word}")
         
             
         
