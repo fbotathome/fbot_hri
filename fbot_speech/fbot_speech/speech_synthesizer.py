@@ -96,9 +96,15 @@ class SpeechSynthesizerNode(WavToMouth):
                 continue
             response.success = self.playAllData()
             self.get_logger().info(f"AllData: {response}")
-        except:
+        except Exception as e:
             response.success = False
             self.get_logger().error(f"Error while synthesizing speech voice: {e}")
+            # Reset stream state so the next request can try again
+            try:
+                self.stopStream()
+            except Exception:
+                self.stream = None
+                self.streaming = False
         
         # except Exception as e:
         #     response.success = False
