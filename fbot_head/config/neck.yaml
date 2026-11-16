@@ -65,3 +65,9 @@ neck_controller:
       keypoint_min_score: 0.5
       shoulder_to_head: 0.25    # m above the shoulders when the head keypoints are missing
       person_z_limits: [0.4, 2.3]   # m in fixed_frame, person targets outside are rejected
+      # lookattarget: another node streams the point to look at (person following)
+      target:
+        topic: neck/target_point
+        lost_timeout: 15.0      # s without points before returning to the initial angle (request timeout 0)
+        max_speed_deg: 90.0     # faster than lookat: the base also turns while following
+        max_accel_deg: 180.0

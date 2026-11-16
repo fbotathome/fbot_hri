@@ -229,6 +229,10 @@ ros2 topic pub /display_command std_msgs/msg/String "{data: 'topic:/camera/image
 |---------|------|-------------|
 | `/lookat_start` | [`LookAtDescription3D`](fbot_vision_msgs/srv/LookAtDescription3D.srv) | Start looking at 3D target |
 | `/lookat_stop` | [`Empty`](std_srvs/srv/Empty.srv) | Stop looking behavior |
+| `/lookatplace_start` | `fbot_vision_msgs/srv/LookAtPlace3D` | Keep looking at a fixed pose while the robot moves |
+| `/lookatplace_stop` | [`Empty`](std_srvs/srv/Empty.srv) | Stop looking at the place |
+| `/lookattarget_start` | `fbot_vision_msgs/srv/LookAtTarget3D` | Follow the points another node streams (`PointStamped`, default topic `/neck/target_point`); used by the person following state, which owns the target identity |
+| `/lookattarget_stop` | [`Empty`](std_srvs/srv/Empty.srv) | Stop following the point stream |
 
 ### Available Emotions
 

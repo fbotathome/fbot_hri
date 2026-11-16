@@ -13,7 +13,7 @@ from std_srvs.srv import Empty
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Bool, Float64MultiArray
 from fbot_vision_msgs.msg import Detection3DArray
-from fbot_vision_msgs.srv import LookAtDescription3D, LookAtPlace3D
+from fbot_vision_msgs.srv import LookAtDescription3D, LookAtPlace3D, LookAtTarget3D
 from geometry_msgs.msg import PointStamped
 from visualization_msgs.msg import Marker
 from .PyDynamixel import DxlCommProtocol2, JointProtocol2
@@ -37,6 +37,9 @@ class NeckController(Node):
       boris_head/joint_states, so the camera TF follows the real neck position.
     - Detections (lookat) are transformed into `lookat.fixed_frame` with the TF at the
       image stamp, filtered, and followed by one control loop at `control_rate`.
+    - In the target mode another node owns the identity of what is followed (e.g. the person
+      following state) and streams the point to look at; the neck only filters and pursues it,
+      holds the last direction when the stream stops and never picks a target by itself.
     - The neck only starts moving when the target is more than `start_threshold_deg`
       away and stops correcting once it is within `stop_threshold_deg` (hysteresis),
       with velocity/acceleration profiles on the motors.
@@ -71,9 +74,11 @@ class NeckController(Node):
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
 
         # lookat / lookatplace state
-        self.mode = None                 # None | 'lookat' | 'place'
+        self.mode = None                 # None | 'lookat' | 'place' | 'target' (point modes) | 'return'
         self.correcting = False          # hysteresis state of the control loop
         self.sub_lookat = None
+        self.sub_target = None
+        self.pending_points = deque(maxlen=5)   # (receive time, PointStamped), target mode
         self.lookat_identifier = None
         self.lookat_label = ''
         self.mode_initial_angle = list(self.initial_angle)
@@ -88,8 +93,11 @@ class NeckController(Node):
         self.target_id = None
         self.jump_candidates = []
         self.acquire_candidates = []     # (time, point) of detections confirming a new target
-        self.place_point = None
-        self.place_deadline = None
+        # point modes: the target is kept in point_frame (fixed_frame for a stream, the request
+        # frame for a place, so map corrections are followed) and expires at point_deadline
+        self.point_frame = None
+        self.point_deadline = None
+        self.point_limits = (None, None)  # (max speed, max accel) of the pursuit, None = lookat defaults
 
         self.pub_joint_states = self.create_publisher(JointState, 'boris_head/joint_states', 10)
         latched = QoSProfile(depth=1, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
@@ -104,6 +112,8 @@ class NeckController(Node):
         self.srv_stop_lookat = self.create_service(Empty, 'lookat_stop', self.lookAtStop)
         self.srv_start_lookatplace = self.create_service(LookAtPlace3D, 'lookatplace_start', self.lookAtPlaceStart)
         self.srv_stop_lookatplace = self.create_service(Empty, 'lookatplace_stop', self.lookAtPlaceStop)
+        self.srv_start_lookattarget = self.create_service(LookAtTarget3D, 'lookattarget_start', self.lookAtTargetStart)
+        self.srv_stop_lookattarget = self.create_service(Empty, 'lookattarget_stop', self.lookAtTargetStop)
 
         self.sendGoal(self.initial_angle, force_head=True)
         self.state_timer = self.create_timer(1.0 / self.state_rate, self.readState)
@@ -161,6 +171,10 @@ class NeckController(Node):
         self.declare_parameter('lookat.keypoint_min_score', 0.5)
         self.declare_parameter('lookat.shoulder_to_head', 0.25)
         self.declare_parameter('lookat.person_z_limits', [0.4, 2.3])
+        self.declare_parameter('lookat.target.topic', 'neck/target_point')
+        self.declare_parameter('lookat.target.lost_timeout', 15.0)
+        self.declare_parameter('lookat.target.max_speed_deg', 90.0)
+        self.declare_parameter('lookat.target.max_accel_deg', 180.0)
 
     def readParameters(self) -> None:
         p = lambda name: self.get_parameter(name).value
@@ -210,6 +224,10 @@ class NeckController(Node):
         self.keypoint_min_score = p('lookat.keypoint_min_score')
         self.shoulder_to_head = p('lookat.shoulder_to_head')
         self.person_z_limits = list(p('lookat.person_z_limits'))
+        self.target_topic = p('lookat.target.topic')
+        self.target_lost_timeout = p('lookat.target.lost_timeout')
+        self.target_max_speed = p('lookat.target.max_speed_deg')
+        self.target_max_accel = p('lookat.target.max_accel_deg')
 
     def setupMotors(self) -> None:
         try:
@@ -341,12 +359,16 @@ class NeckController(Node):
         self.pause = not msg.data
 
     def updateNeckCallback(self, msg) -> None:
+        if self.mode == 'return':
+            self.stopMode()
         if self.mode is not None:
             self.get_logger().warn(f'updateNeck ignored: {self.mode} is active.', throttle_duration_sec=2.0)
             return
         self.sendGoal(list(msg.data), force_head=True)
 
     def updateNeckByPointCallback(self, msg) -> None:
+        if self.mode == 'return':
+            self.stopMode()
         if self.mode is not None:
             self.get_logger().warn(f'updateNeckByPoint ignored: {self.mode} is active.', throttle_duration_sec=2.0)
             return
@@ -390,8 +412,7 @@ class NeckController(Node):
         qos = QoSProfile(history=QoSHistoryPolicy.KEEP_LAST, depth=1, reliability=QoSReliabilityPolicy.BEST_EFFORT)
         self.sub_lookat = self.create_subscription(Detection3DArray, req.recognitions3d_topic, self.lookAtRecogCallback, qos)
         self.mode = 'lookat'
-        self.sendGoal(self.mode_initial_angle, force_head=True)
-        self.returned_home = True
+        self.returned_home = False      # no target yet: the loop moves smoothly to the initial angle
         self.get_logger().info(
             f"lookAt started: topic='{req.recognitions3d_topic}', label='{req.label}', "
             f"global_id={self.lookat_identifier}, lost_timeout={self.lost_timeout:.1f}s.")
@@ -399,9 +420,7 @@ class NeckController(Node):
 
     def lookAtStop(self, req: Empty.Request, res: Empty.Response):
         if self.mode == 'lookat':
-            self.stopMode()
-            self.sendGoal(self.mode_initial_angle, force_head=True)
-            self.get_logger().info('lookAt stopped, neck returned to the initial angle.')
+            self.startReturn('lookAt stopped')
         return res
 
     def lookAtRecogCallback(self, msg: Detection3DArray) -> None:
@@ -536,18 +555,7 @@ class NeckController(Node):
                 self.target = np.mean(self.jump_candidates, axis=0)
                 self.target_vel = np.zeros(3)
             else:
-                # alpha-beta filter: position + horizontal velocity, used to keep moving
-                # between detections (they arrive at only a few Hz)
-                dt = max(now - self.target_time, 1e-3)
-                predicted = self.target + self.target_vel * dt
-                residual = point - predicted
-                alpha = 1.0 - math.exp(-dt / self.filter_tau)
-                self.target = predicted + alpha * residual
-                self.target_vel = self.target_vel + self.velocity_gain * residual / dt
-                self.target_vel[2] = 0.0
-                speed = np.linalg.norm(self.target_vel)
-                if speed > self.max_target_speed:
-                    self.target_vel *= self.max_target_speed / speed
+                self.filterTarget(point, now)
         self.jump_candidates = []
         self.acquire_candidates = []
         self.target_time = now
@@ -555,9 +563,25 @@ class NeckController(Node):
         self.returned_home = False
         self.publishTargetMarker(self.target, source)
 
-    def publishTargetMarker(self, point, text) -> None:
+    def filterTarget(self, point, now) -> None:
+        """
+        @brief Alpha-beta filter: position + horizontal velocity, used to keep moving between
+               measurements (they arrive at only a few Hz).
+        """
+        dt = max(now - self.target_time, 1e-3)
+        predicted = self.target + self.target_vel * dt
+        residual = point - predicted
+        alpha = 1.0 - math.exp(-dt / self.filter_tau)
+        self.target = predicted + alpha * residual
+        self.target_vel = self.target_vel + self.velocity_gain * residual / dt
+        self.target_vel[2] = 0.0
+        speed = np.linalg.norm(self.target_vel)
+        if speed > self.max_target_speed:
+            self.target_vel *= self.max_target_speed / speed
+
+    def publishTargetMarker(self, point, text, frame=None) -> None:
         m = Marker()
-        m.header.frame_id = self.fixed_frame
+        m.header.frame_id = frame or self.fixed_frame
         m.header.stamp = self.get_clock().now().to_msg()
         m.ns = 'neck_lookat'
         m.id = 0
@@ -572,32 +596,113 @@ class NeckController(Node):
         m.lifetime = Duration(seconds=1.0).to_msg()
         self.pub_target_marker.publish(m)
 
-    # ------------------------------------------------------------------ lookatplace (fixed point)
+    # ------------------------------------------------------------------ point modes (lookatplace, lookattarget)
+    # Both make the neck look at a point given from outside (not chosen by the neck): one fixed
+    # point (place) or a stream of points (target). They share the target, the prediction and the
+    # pursuit; they differ in where the point comes from, its frame and when it expires.
+
+    def startPointMode(self, mode, initial_angle, frame, limits) -> None:
+        self.stopMode()
+        self.mode_initial_angle = list(initial_angle) if len(initial_angle) == 2 else list(self.initial_angle)
+        self.point_frame = frame
+        self.point_limits = limits
+        self.mode = mode
+
+    def setPointTarget(self, point, now, static, lifetime) -> None:
+        """
+        @brief Updates the target of a point mode with a point already in point_frame. A static
+               point, the first one or a jump (the publisher owns the identity: a jump is a new
+               target position, not an outlier) resets the filter; otherwise alpha-beta filter.
+               The target expires `lifetime` seconds from now.
+        """
+        if static or self.target is None or np.linalg.norm(point - self.target) > self.max_jump:
+            self.target = point
+            self.target_vel = np.zeros(3)
+        else:
+            self.filterTarget(point, now)
+        self.target_time = now
+        self.point_deadline = now + lifetime
+        self.returned_home = False
+        self.publishTargetMarker(self.target, self.mode, self.point_frame)
+
+    def stopPointMode(self, mode, name) -> None:
+        if self.mode == mode:
+            self.startReturn(f'{name} stopped')
 
     def lookAtPlaceStart(self, req: LookAtPlace3D.Request, res: LookAtPlace3D.Response):
         """
-        @brief Keeps looking at a fixed pose (any frame) while the robot moves, for req.timeout
-               seconds (0 -> 10 min), then returns to req.initial_angle.
+        @brief Keeps looking at a fixed pose while the robot moves, for req.timeout seconds
+               (0 -> 10 min), then returns to req.initial_angle and ends the mode. The point stays
+               in the pose frame (e.g. map) and is transformed with the latest TF every cycle.
         """
-        self.stopMode()
-        self.mode_initial_angle = list(req.initial_angle) if len(req.initial_angle) == 2 else list(self.initial_angle)
-        self.place_point = PointStamped()
-        self.place_point.header.frame_id = req.pose.header.frame_id
-        self.place_point.point = req.pose.pose.position
+        self.startPointMode('place', req.initial_angle, req.pose.header.frame_id, (None, None))
+        p = req.pose.pose.position
         timeout = req.timeout if req.timeout > 0 else 600.0
-        self.place_deadline = self.now() + timeout
-        self.mode = 'place'
-        p = self.place_point.point
+        self.setPointTarget(np.array([p.x, p.y, p.z]), self.now(), static=True, lifetime=timeout)
         self.get_logger().info(f"lookAtPlace started: ({p.x:.2f}, {p.y:.2f}, {p.z:.2f}) in "
-                               f"'{self.place_point.header.frame_id}', timeout={timeout:.0f}s.")
+                               f"'{self.point_frame}', timeout={timeout:.0f}s.")
         return res
 
     def lookAtPlaceStop(self, req: Empty.Request, res: Empty.Response):
-        if self.mode == 'place':
-            self.stopMode()
-            self.sendGoal(self.mode_initial_angle, force_head=True)
-            self.get_logger().info('lookAtPlace stopped, neck returned to the initial angle.')
+        self.stopPointMode('place', 'lookAtPlace')
         return res
+
+    def lookAtTargetStart(self, req: LookAtTarget3D.Request, res: LookAtTarget3D.Response):
+        """
+        @brief Follows the points published on req.target_topic (PointStamped, any frame). The
+               publisher decides what is followed; the neck filters the points and pursues them.
+               Without new points the neck keeps looking at the last one (in fixed_frame, so it
+               compensates the base motion) and returns to req.initial_angle after req.timeout
+               seconds (0 -> lookat.target.lost_timeout); the mode stays active. A point with a
+               zero stamp is a fixed direction (latest TF, no velocity estimate), e.g. to scan
+               for a lost target.
+        """
+        self.startPointMode('target', req.initial_angle, self.fixed_frame,
+                            (self.target_max_speed, self.target_max_accel))
+        topic = req.target_topic or self.target_topic
+        self.lost_timeout = max(req.timeout if req.timeout > 0 else self.target_lost_timeout, self.min_lost_timeout)
+        self.sub_target = self.create_subscription(PointStamped, topic, self.targetPointCallback, 10)
+        self.returned_home = False      # no points yet: the loop moves smoothly to the initial angle
+        self.get_logger().info(f"lookAtTarget started: topic='{topic}', lost_timeout={self.lost_timeout:.1f}s.")
+        return res
+
+    def lookAtTargetStop(self, req: Empty.Request, res: Empty.Response):
+        self.stopPointMode('target', 'lookAtTarget')
+        return res
+
+    def targetPointCallback(self, msg: PointStamped) -> None:
+        if self.mode == 'target':
+            self.pending_points.append((self.now(), msg))
+
+    def processPendingPoints(self) -> None:
+        """
+        @brief Moves the queued points into fixed_frame (TF at their stamp, waiting up to
+               lookat.tf_wait for it; latest TF for a zero stamp) and updates the target.
+        """
+        now = self.now()
+        while self.pending_points:
+            received, msg = self.pending_points[0]
+            stamp = Time.from_msg(msg.header.stamp)
+            static = stamp.nanoseconds == 0
+            point = np.array([msg.point.x, msg.point.y, msg.point.z])
+            if msg.header.frame_id != self.fixed_frame:
+                try:
+                    tr = self.tf_buffer.lookup_transform(self.fixed_frame, msg.header.frame_id, stamp)
+                except tf2_ros.ExtrapolationException as e:
+                    if now - received < self.tf_wait:
+                        return      # TF at that stamp not there yet: try again next cycle
+                    self.get_logger().warn(f'lookAtTarget: no TF at the point stamp: {e}', throttle_duration_sec=5.0)
+                    self.pending_points.popleft()
+                    continue
+                except Exception as e:
+                    self.get_logger().error(f'lookAtTarget: transform {msg.header.frame_id} -> {self.fixed_frame} '
+                                            f'failed: {e}', throttle_duration_sec=5.0)
+                    self.pending_points.popleft()
+                    continue
+                q = tf2_geometry_msgs.do_transform_point(msg, tr).point
+                point = np.array([q.x, q.y, q.z])
+            self.pending_points.popleft()
+            self.setPointTarget(point, now, static, self.lost_timeout)
 
     # ------------------------------------------------------------------ control loop
 
@@ -605,6 +710,10 @@ class NeckController(Node):
         if self.sub_lookat is not None:
             self.destroy_subscription(self.sub_lookat)
             self.sub_lookat = None
+        if self.sub_target is not None:
+            self.destroy_subscription(self.sub_target)
+            self.sub_target = None
+        self.pending_points.clear()
         self.mode = None
         self.correcting = False
         self.pending.clear()
@@ -613,41 +722,84 @@ class NeckController(Node):
         self.target_id = None
         self.jump_candidates = []
         self.acquire_candidates = []
-        self.place_point = None
+        self.point_frame = None
+        self.point_deadline = None
+        self.point_limits = (None, None)
 
     def controlLoop(self) -> None:
         if self.mode is None:
             return
         try:
+            if self.mode == 'return':
+                self.returnStep()
+                return
             if self.mode == 'lookat':
                 self.processPending()
                 if self.target is None or self.now() - self.target_time > self.lost_timeout:
-                    if not self.returned_home:
-                        self.get_logger().info('lookAt: target lost, returning to the initial angle.')
-                        self.returned_home = True
-                        self.target = None
-                    # slow pursuit back to the initial angle (not a direct jump)
-                    self.track(self.clampCommand(self.mode_initial_angle), max_speed=self.return_speed)
+                    self.returnHome('lookAt: target lost, returning to the initial angle.')
                     return
-                horizon = min(self.now() - self.target_time, self.max_extrapolation)
-                predicted = self.target + self.target_vel * horizon
-                ps = PointStamped()
-                ps.header.frame_id = self.fixed_frame
-                ps.point.x, ps.point.y, ps.point.z = map(float, predicted)
-                desired = self.anglesToPoint(ps)
-            else:
-                if self.now() > self.place_deadline:
-                    self.get_logger().info('lookAtPlace timed out, returning to the initial angle.')
-                    self.stopMode()
-                    self.sendGoal(self.mode_initial_angle, force_head=True)
-                    return
-                desired = self.anglesToPoint(self.place_point)
-            if desired is not None:
-                self.track(self.clampCommand(desired))
+                self.pursueTarget(self.fixed_frame)
+                return
+
+            if self.mode == 'target':
+                self.processPendingPoints()
+            if self.target is None or self.now() > self.point_deadline:
+                if self.mode == 'place':
+                    self.startReturn('lookAtPlace timed out')
+                else:
+                    self.returnHome('lookAtTarget: no points, returning to the initial angle.')
+                return
+            self.pursueTarget(self.point_frame, *self.point_limits)
         except Exception as e:
             self.get_logger().error(f'Neck control loop: {e}', throttle_duration_sec=2.0)
 
-    def track(self, desired, max_speed=None) -> None:
+    def startReturn(self, reason) -> None:
+        """
+        @brief Ends the active look-at mode and brings the neck back to its initial angle with the
+               same smooth pursuit (lookat.return_speed_deg), instead of one direct goal: a direct
+               goal runs with the motor profile (fast, strong acceleration) and looks abrupt.
+               updateNeck / updateNeckByPoint / a new start interrupt it.
+        """
+        self.stopMode()
+        self.mode = 'return'
+        self.correcting = True          # go all the way to stop_threshold, even from a few degrees away
+        self.get_logger().info(f'{reason}, returning smoothly to the initial angle.')
+
+    def returnStep(self) -> None:
+        target = self.clampCommand(self.mode_initial_angle)
+        self.track(target, max_speed=self.return_speed)
+        if self.setpoint is None or not self.state_ok:
+            return
+        if (not self.correcting and np.max(np.abs(self.setpoint_vel)) < 1e-3) or \
+                np.max(np.abs(np.array(target) - self.setpoint)) < 0.05:
+            self.stopMode()
+            self.sendGoal(target, force_head=True)      # last < stop_threshold, and the animatronic head
+            self.get_logger().info('Neck back at the initial angle.')
+
+    def returnHome(self, message) -> None:
+        """@brief Slow pursuit back to the initial angle (not a direct jump); the mode stays active."""
+        if not self.returned_home:
+            self.get_logger().info(message)
+            self.returned_home = True
+            self.target = None
+        self.track(self.clampCommand(self.mode_initial_angle), max_speed=self.return_speed)
+
+    def pursueTarget(self, frame, max_speed=None, max_accel=None) -> None:
+        """
+        @brief Points the neck at the target predicted up to max_extrapolation ahead. After that the
+               prediction stays where it is, so the neck keeps looking at the place where the target
+               was last seen while the base moves (the target is in a frame that does not move with it).
+        """
+        horizon = min(self.now() - self.target_time, self.max_extrapolation)
+        predicted = self.target + self.target_vel * horizon
+        ps = PointStamped()
+        ps.header.frame_id = frame
+        ps.point.x, ps.point.y, ps.point.z = map(float, predicted)
+        desired = self.anglesToPoint(ps)
+        if desired is not None:
+            self.track(self.clampCommand(desired), max_speed=max_speed, max_accel=max_accel)
+
+    def track(self, desired, max_speed=None, max_accel=None) -> None:
         """
         @brief Smooth pursuit. A setpoint moves towards the desired angles with a proportional
                velocity (lookat.gain) limited by lookat.max_speed_deg / max_accel_deg and is sent
@@ -671,7 +823,7 @@ class NeckController(Node):
 
         speed = self.max_speed if max_speed is None else max_speed
         target_vel = np.clip(self.gain * error, -speed, speed) if self.correcting else np.zeros(2)
-        max_dv = self.max_accel * dt
+        max_dv = (self.max_accel if max_accel is None else max_accel) * dt
         self.setpoint_vel += np.clip(target_vel - self.setpoint_vel, -max_dv, max_dv)
         if not self.correcting and np.max(np.abs(self.setpoint_vel)) < 1e-3:
             return
