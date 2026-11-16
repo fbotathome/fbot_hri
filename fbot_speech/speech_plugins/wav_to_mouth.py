@@ -184,12 +184,44 @@ class WavToMouth(Node):
         mouth_angle_int16.data = mouth_angle
         self.mouth_debug_publisher.publish(mouth_angle_int16)
 
-    def playAllData(self):
+    def _queuedAudioSeconds(self):
+        with self.data_lock:
+            num_bytes = sum(len(chunk) for chunk in self.data)
+        return num_bytes / float(2 * max(self.channels, 1) * max(self.sample_rate, 1))
+
+    def playAllData(self, margin_sec=5.0):
+        """Play every queued chunk and close the stream. Returns True on success.
+
+        The wait is bounded by the audio length plus a margin: when the USB sound
+        card hangs, PortAudio stops calling audioCallback and an unbounded wait
+        blocked the node forever (it then also ignored SIGINT)."""
+        timeout = self._queuedAudioSeconds() + margin_sec
         # Clear the playback done event
         self.playback_done_event.clear()
         # Start the audio stream
         self.startStream()
         # Wait until the playback is done
-        self.playback_done_event.wait()
-        # Stop the stream gracefully
-        return self.stopStream()
+        if self.playback_done_event.wait(timeout=timeout):
+            # Stop the stream gracefully
+            return bool(self.stopStream())
+
+        self.get_logger().error(
+            f"Audio playback did not finish within {timeout:.1f} s; the sound card may be hung. Aborting stream.")
+        with self.data_lock:
+            self.data = []
+        self.abortStream()
+        return False
+
+    def abortStream(self):
+        """Drop the stream without waiting for the device (stop() can block on a hung card)."""
+        with self.stream_lock:
+            self.streaming = False
+            stream, self.stream = self.stream, None
+        self.output.data = [0, 100]
+        self.angle_publisher.publish(self.output)
+        if stream is not None:
+            try:
+                stream.abort(ignore_errors=True)
+                stream.close(ignore_errors=True)
+            except Exception as e:
+                self.get_logger().error(f"Error while aborting audio stream: {e}")
