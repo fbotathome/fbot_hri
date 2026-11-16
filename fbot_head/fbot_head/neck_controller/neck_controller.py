@@ -24,31 +24,32 @@ class NeckController(Node):
         """
         super().__init__('neck_controller')
 
+        self.declareParameters()
+        self.readParameters()
+
         self.motors_config = {
             'horizontal_neck_joint':{
                 'current_angle': np.pi,
-                'id': 62,
-                'min_angle': 120,
-                'max_angle': 240
+                'id': self.horizontal_neck_joint_id,
+                'min_angle': self.horizontal_neck_joint_min_angle,
+                'max_angle': self.horizontal_neck_joint_max_angle
             },
             'vertical_neck_joint':{
                 'current_angle': np.pi,
-                'id': 61,
-                'min_angle': 150,
-                'max_angle': 190
+                'id': self.vertical_neck_joint_id,
+                'min_angle': self.vertical_neck_joint_min_angle,
+                'max_angle': self.vertical_neck_joint_max_angle
             },
             'head_pan_joint':{
                 'current_angle': np.pi,
-                'id': 8,
+                'id': self.head_pan_joint_id,
             },
             'head_tilt_joint': {
                 'current_angle': np.pi,
-                'id': 9,
+                'id': self.head_tilt_joint_id,
             }
         }
 
-        self.vel_limit = 800
-        self.neck_port = "/dev/ttyNECK"
         self.motors: dict[str, JointProtocol2] = {}
         self.neck_comm = None
         try:
@@ -96,12 +97,44 @@ class NeckController(Node):
         self.updateNeck(self.initial_angle)
         self.joints_publish_timer = self.create_timer(5, self.updateJointsDict)
 
+    def declareParameters(self) -> None:
+        """
+        @brief Declares the parameters for the NeckController node.
+        """
+        self.declare_parameter('neck_port', "/dev/ttyNECK")
+        self.declare_parameter('baudrate', 57600)
+        self.declare_parameter('vel_limit', 800)
+        self.declare_parameter('horizontal_neck_joint.id', 62)
+        self.declare_parameter('horizontal_neck_joint.min_angle', 120)
+        self.declare_parameter('horizontal_neck_joint.max_angle', 240)
+        self.declare_parameter('vertical_neck_joint.id', 61)
+        self.declare_parameter('vertical_neck_joint.min_angle', 150)
+        self.declare_parameter('vertical_neck_joint.max_angle', 190)
+        self.declare_parameter('head_pan_joint.id', 8)
+        self.declare_parameter('head_tilt_joint.id', 9)
+
+    def readParameters(self) -> None:
+        """
+        @brief Reads the parameters for the NeckController node.
+        """
+        self.neck_port = self.get_parameter('neck_port').get_parameter_value().string_value
+        self.baudrate = self.get_parameter('baudrate').get_parameter_value().integer_value
+        self.vel_limit = self.get_parameter('vel_limit').get_parameter_value().integer_value
+        self.horizontal_neck_joint_id = self.get_parameter('horizontal_neck_joint.id').get_parameter_value().integer_value
+        self.horizontal_neck_joint_min_angle = self.get_parameter('horizontal_neck_joint.min_angle').get_parameter_value().integer_value
+        self.horizontal_neck_joint_max_angle = self.get_parameter('horizontal_neck_joint.max_angle').get_parameter_value().integer_value
+        self.vertical_neck_joint_id = self.get_parameter('vertical_neck_joint.id').get_parameter_value().integer_value
+        self.vertical_neck_joint_min_angle = self.get_parameter('vertical_neck_joint.min_angle').get_parameter_value().integer_value
+        self.vertical_neck_joint_max_angle = self.get_parameter('vertical_neck_joint.max_angle').get_parameter_value().integer_value
+        self.head_pan_joint_id = self.get_parameter('head_pan_joint.id').get_parameter_value().integer_value
+        self.head_tilt_joint_id = self.get_parameter('head_tilt_joint.id').get_parameter_value().integer_value
+
     def setupMotors(self) -> None:
         """
         @brief Initializes the Dynamixel motors, sets up the communication with the motors and configures their torque and velocity limits.
         """
         try:
-            self.neck_comm = DxlCommProtocol2(self.neck_port)
+            self.neck_comm = DxlCommProtocol2(self.baudrate, self.neck_port)
 
         except Exception as e:
             raise RuntimeError(f"Failed to initialize NeckController: Neck port {self.neck_port} failed to connect. See readme for more details.")

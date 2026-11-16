@@ -28,21 +28,18 @@ class DxlCommProtocol2(object):
     protocol.
     ''' 
 
-    def __init__(self, commPort="/dev/ttyNECK", baudnum = 1):
+    def __init__(self, baudRate: int, commPort: str = "/dev/ttyNECK"):
 
-        ''' The argument commPort should be
+        '''The argument baudRate should be the
+        baud rate of the serial device.
+            The argument commPort should be
         the path to the serial device.
-        The constructor optionally takes
-        a baudnum argument:
-           baudrate = 2Mbps / (baudnum + 1)
-        If no baudnum is provided, then the
-        default is 1, resulting 1Mbps
         '''
 
         self.commPort = commPort
-        self.baudnum = baudnum
-        self.baudRate = 2000000/(baudnum+1)
+        self.baudRate = baudRate
         self.socket = dxl.PortHandler(self.commPort)
+        self.socket.setBaudRate(self.baudRate)
         self.pack_handler = dxl.PacketHandler(PROTOCOL_VERSION)
 
         try:
@@ -50,7 +47,6 @@ class DxlCommProtocol2(object):
             print("Port Open Success")
         except Exception:
             raise Exception("Port Open Error")
-        
         self.joints = []
         self.joint_ids = []
         self.total = 0

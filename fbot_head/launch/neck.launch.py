@@ -10,12 +10,19 @@ def generate_launch_description():
         'config',
         'motors.yaml'
         )
+    
+    neck_config = os.path.join(
+        get_package_share_directory('fbot_head'),
+        'config',
+        'neck.yaml'
+        )
         
     return launch.LaunchDescription([
         Node(
             package='fbot_head',
             executable='neck_controller',
-            name='neck_controller'),
+            name='neck_controller',
+            parameters = [neck_config]),
         Node(
             package='fbot_head',
             executable='emotions_bridge',
