@@ -61,17 +61,21 @@ class SpeechSynthesizerNode(WavToMouth):
         """
         config = self.configs
         speech = request.text
-        # try:
-            # Call Riva TTS to synthesize the speech
-        self.resp = self.riva_tts.synthesize(
-            custom_dictionary=config, 
-            text=speech,
-            voice_name=config["voice_name"], 
-            sample_rate_hz=config["sample_rate_hz"],
-            language_code=config["language_code"],
-            encoding=riva.client.AudioEncoding.LINEAR_PCM,
-        )
-        
+        # A gRPC error here used to escape the service callback and kill the node.
+        try:
+            self.resp = self.riva_tts.synthesize(
+                custom_dictionary=config,
+                text=speech,
+                voice_name=config["voice_name"],
+                sample_rate_hz=config["sample_rate_hz"],
+                language_code=config["language_code"],
+                encoding=riva.client.AudioEncoding.LINEAR_PCM,
+            )
+        except Exception as e:
+            self.get_logger().error(f"Riva TTS request failed ({self.riva_url}): {e}")
+            response.success = False
+            return response
+
         # Convert the response audio to a NumPy array
         audio_samples = np.frombuffer(self.resp.audio, dtype=np.int16)
         # Prepare the audio data to send to the audio player
@@ -92,8 +96,8 @@ class SpeechSynthesizerNode(WavToMouth):
             info = audio_info
             self.setDataAndInfo(data, info)
 
-            while self.playAllData() != True:
-                continue
+            # Play once. Calling playAllData again opened and closed an empty
+            # second stream on every utterance.
             response.success = self.playAllData()
             self.get_logger().info(f"AllData: {response}")
         except Exception as e:
