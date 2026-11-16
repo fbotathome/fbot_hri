@@ -1,14 +1,17 @@
 neck_controller:
   ros__parameters:
+    neck_port: '/dev/ttyNECK'
+    baudrate: 57600
+
     horizontal_neck_joint:
       id: 62
-      min_angle: 120
-      max_angle: 240
+      min_angle: 100
+      max_angle: 260
 
     vertical_neck_joint:
       id: 61
       min_angle: 150
-      max_angle: 190
+      max_angle: 200
 
     head_pan_joint:
       id: 8
@@ -16,6 +19,49 @@ neck_controller:
     head_tilt_joint:
       id: 9
 
-    vel_limit: 800
-    neck_port: '/dev/ttyNECK'
-    baudrate: 57600
+    # [horizontal, vertical] in degrees, 180 = straight ahead
+    initial_angle: [180.0, 180.0]
+
+    # Dynamixel profiles: velocity 0.229 rpm/unit, acceleration 214.577 rev/min^2/unit (0 = unlimited)
+    camera:
+      profile_velocity: 40      # ~55 deg/s, limits direct goals (updateNeck, start/stop)
+      profile_acceleration: 10
+      # during the pursuit (lookat/lookatplace) the node limits speed/acceleration itself and
+      # streams goals at control_rate; a slow motor profile there brakes at every goal (ticks)
+      pursuit_profile_velocity: 150   # ~206 deg/s
+    head:
+      profile_velocity: 40
+      profile_acceleration: 8
+
+    state_rate: 30.0            # Hz, sync read of the motors -> boris_head/joint_states
+    control_rate: 50.0          # Hz, lookat / lookatplace loop (pursuit goals are streamed at this rate)
+    moving_threshold: 0.05      # rad/s, above it neck/moving is true
+
+    lookat:
+      fixed_frame: odom         # target is filtered in this frame (must not move with the neck)
+      head_frame: camera_link_static
+      tf_wait: 0.3              # s to wait for the TF at the detection stamp
+      max_detection_age: 1.5    # s, older detections are dropped
+      filter_time_constant: 0.25
+      max_jump: 0.8             # m, larger jumps need jump_confirmations detections in a row
+      jump_confirmations: 3
+      switch_target_after: 1.5  # s without the followed target before picking another one
+      acquire_confirmations: 3  # detections at the same place needed to start following someone
+      acquire_window: 1.0       # s within which they must arrive
+      lost_timeout: 3.0         # s without detections before returning to the initial angle (request timeout 0)
+      min_lost_timeout: 2.0
+      velocity_gain: 0.3        # alpha-beta filter beta: how fast the target velocity estimate adapts
+      max_target_speed: 1.5     # m/s, cap of the target velocity estimate
+      max_extrapolation: 0.6    # s, how far the target is predicted after the last detection
+      # smooth pursuit: a setpoint follows the target with velocity = gain * error, limited below
+      start_threshold_deg: 4.0  # start the pursuit when the target is this far from the setpoint
+      stop_threshold_deg: 1.0   # end it once within this (then the velocity ramps down)
+      gain: 2.5                 # 1/s
+      max_speed_deg: 45.0       # deg/s
+      max_accel_deg: 90.0       # deg/s^2
+      return_speed_deg: 25.0    # deg/s, back to the initial angle when the target is lost
+      min_command_step_deg: 0.2
+      head_deadband_deg: 10.0   # animatronic head follows only bigger changes
+      keypoint_min_score: 0.5
+      shoulder_to_head: 0.25    # m above the shoulders when the head keypoints are missing
+      person_z_limits: [0.4, 2.3]   # m in fixed_frame, person targets outside are rejected
