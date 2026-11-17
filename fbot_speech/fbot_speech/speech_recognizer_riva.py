@@ -8,6 +8,7 @@ import riva.client.audio_io
 import queue
 import time
 import threading
+import grpc
 from rclpy.node import Node
 from std_srvs.srv import Empty
 from fbot_speech_msgs.srv import RivaToText
@@ -123,7 +124,26 @@ class RivaRecognizerNode(Node):
     def handleRecognition(self, req: RivaToText.Request, res: RivaToText.Response):
         """
         @brief Callback function for the speech recognition service.
-        This function is called when a new request is received for speech recognition
+        Never lets an exception escape: a Riva/gRPC failure (server unreachable, stream
+        aborted) would otherwise kill the node. On error it logs the reason and returns
+        an empty text.
+        """
+        try:
+            return self._recognize(req, res)
+        except grpc.RpcError as e:
+            self.get_logger().error(
+                f"Riva ASR request failed ({self.riva_url}): {e.code().name}: {e.details()}")
+        except Exception as e:
+            self.get_logger().error(f"Speech recognition failed: {type(e).__name__}: {e}")
+        # Stop the microphone generator so the next request starts clean
+        self._stop_yielding = True
+        res.text = ""
+        return res
+
+    def _recognize(self, req: RivaToText.Request, res: RivaToText.Response):
+        """
+        @brief Runs one streaming recognition against Riva and fills res.text.
+        Exceptions are handled by handleRecognition.
         """
         config_service = deepcopy(self.config)
         res.text = "" 

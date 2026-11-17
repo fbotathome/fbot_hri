@@ -281,6 +281,11 @@ class NeckController(Node):
         self.get_logger().info(f"Starting lookAt initial angle: {isinstance(req.initial_angle, list)} -> {req.initial_angle} -> {type(req.initial_angle)}")
         # if isinstance(req.initial_angle, list) and len(req.initial_angle) == 2:
         self.initial_angle = list(req.initial_angle)
+        # A second lookAtStart without lookAtStop would leak the previous subscription,
+        # which keeps firing after a later stop clears the identifier.
+        if self.sub_lookat is not None:
+            self.destroy_subscription(self.sub_lookat)
+            self.sub_lookat = None
         self.sub_lookat = self.create_subscription(Detection3DArray, req.recognitions3d_topic, self.lookAtRecogCallback, 10)
         self.last_pose  = None
         self.last_pose_time = 0.
@@ -299,6 +304,9 @@ class NeckController(Node):
         @brief Callback for processing recognition messages and updating the neck position.
         @param msg: (fbot_vision_msgs.msg.Detection3DArray) The message containing the detected objects.
         """
+        # A message already queued when lookAtStop ran can still be dispatched here.
+        if self.lookat_description_identifier is None:
+            return
         selected_desc = self.selectDescription(msg.detections)
 
         if selected_desc is not None:
