@@ -24,7 +24,7 @@ neck_controller:
 
     # Dynamixel profiles: velocity 0.229 rpm/unit, acceleration 214.577 rev/min^2/unit (0 = unlimited)
     camera:
-      profile_velocity: 40      # ~55 deg/s, limits direct goals (updateNeck, start/stop)
+      profile_velocity: 40      # ~55 deg/s, limits direct goals (startup and the last <1 deg of a move)
       profile_acceleration: 10
       # during the pursuit (lookat/lookatplace) the node limits speed/acceleration itself and
       # streams goals at control_rate; a slow motor profile there brakes at every goal (ticks)
@@ -36,6 +36,11 @@ neck_controller:
     state_rate: 30.0            # Hz, sync read of the motors -> boris_head/joint_states
     control_rate: 50.0          # Hz, lookat / lookatplace loop (pursuit goals are streamed at this rate)
     moving_threshold: 0.05      # rad/s, above it neck/moving is true
+
+    # updateNeck / updateNeckByPoint: smooth move (same pursuit as lookat) instead of a direct goal
+    move:
+      speed_deg: 30.0           # deg/s
+      accel_deg: 60.0           # deg/s^2, also used when a look-at mode returns to its initial angle
 
     lookat:
       fixed_frame: odom         # target is filtered in this frame (must not move with the neck)

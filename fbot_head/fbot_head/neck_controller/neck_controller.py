@@ -40,6 +40,9 @@ class NeckController(Node):
     - In the target mode another node owns the identity of what is followed (e.g. the person
       following state) and streams the point to look at; the neck only filters and pursues it,
       holds the last direction when the stream stops and never picks a target by itself.
+    - updateNeck / updateNeckByPoint and the end of every look-at mode move the neck to a fixed
+      angle with the same smooth pursuit (mode 'move', move.speed_deg / move.accel_deg), never
+      with one direct motor goal (the motor profile is fast and accelerates hard).
     - The neck only starts moving when the target is more than `start_threshold_deg`
       away and stops correcting once it is within `stop_threshold_deg` (hysteresis),
       with velocity/acceleration profiles on the motors.
@@ -74,7 +77,7 @@ class NeckController(Node):
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
 
         # lookat / lookatplace state
-        self.mode = None                 # None | 'lookat' | 'place' | 'target' (point modes) | 'return'
+        self.mode = None                 # None | 'lookat' | 'place' | 'target' (point modes) | 'move'
         self.correcting = False          # hysteresis state of the control loop
         self.sub_lookat = None
         self.sub_target = None
@@ -98,6 +101,9 @@ class NeckController(Node):
         self.point_frame = None
         self.point_deadline = None
         self.point_limits = (None, None)  # (max speed, max accel) of the pursuit, None = lookat defaults
+        # move mode: smooth move to a fixed angle (updateNeck, updateNeckByPoint, end of a look-at)
+        self.move_target = None
+        self.move_speed = None
 
         self.pub_joint_states = self.create_publisher(JointState, 'boris_head/joint_states', 10)
         latched = QoSProfile(depth=1, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
@@ -166,6 +172,8 @@ class NeckController(Node):
         self.declare_parameter('lookat.max_speed_deg', 45.0)
         self.declare_parameter('lookat.max_accel_deg', 90.0)
         self.declare_parameter('lookat.return_speed_deg', 25.0)
+        self.declare_parameter('move.speed_deg', 30.0)
+        self.declare_parameter('move.accel_deg', 60.0)
         self.declare_parameter('lookat.min_command_step_deg', 0.2)
         self.declare_parameter('lookat.head_deadband_deg', 10.0)
         self.declare_parameter('lookat.keypoint_min_score', 0.5)
@@ -217,6 +225,8 @@ class NeckController(Node):
         self.max_speed = p('lookat.max_speed_deg')
         self.max_accel = p('lookat.max_accel_deg')
         self.return_speed = p('lookat.return_speed_deg')
+        self.move_speed_default = p('move.speed_deg')
+        self.move_accel = p('move.accel_deg')
         self.start_threshold = p('lookat.start_threshold_deg')
         self.stop_threshold = p('lookat.stop_threshold_deg')
         self.min_command_step = p('lookat.min_command_step_deg')
@@ -359,24 +369,24 @@ class NeckController(Node):
         self.pause = not msg.data
 
     def updateNeckCallback(self, msg) -> None:
-        if self.mode == 'return':
-            self.stopMode()
-        if self.mode is not None:
+        if self.mode not in (None, 'move'):
             self.get_logger().warn(f'updateNeck ignored: {self.mode} is active.', throttle_duration_sec=2.0)
             return
-        self.sendGoal(list(msg.data), force_head=True)
+        if len(msg.data) < 2:
+            self.get_logger().error(f'updateNeck: expected [horizontal, vertical], got {list(msg.data)}.')
+            return
+        self.startMove(list(msg.data)[:2], self.move_speed_default)
 
     def updateNeckByPointCallback(self, msg) -> None:
-        if self.mode == 'return':
-            self.stopMode()
-        if self.mode is not None:
+        """@brief Looks at a point: the angles are computed once, from the robot pose at reception."""
+        if self.mode not in (None, 'move'):
             self.get_logger().warn(f'updateNeckByPoint ignored: {self.mode} is active.', throttle_duration_sec=2.0)
             return
         angles = self.anglesToPoint(msg)
         if angles is None:
             self.get_logger().error('updateNeckByPoint: failed to transform the point.')
             return
-        self.sendGoal(angles, force_head=True)
+        self.startMove(angles, self.move_speed_default)
 
     def anglesToPoint(self, point_stamped: PointStamped):
         """
@@ -405,6 +415,7 @@ class NeckController(Node):
                before returning to req.initial_angle (0 -> lookat.lost_timeout).
         """
         self.stopMode()
+        self.syncSetpoint()
         self.lookat_label = req.label
         self.lookat_identifier = req.global_id if req.global_id > 0 else None
         self.mode_initial_angle = list(req.initial_angle) if len(req.initial_angle) == 2 else list(self.initial_angle)
@@ -420,7 +431,7 @@ class NeckController(Node):
 
     def lookAtStop(self, req: Empty.Request, res: Empty.Response):
         if self.mode == 'lookat':
-            self.startReturn('lookAt stopped')
+            self.startMove(self.mode_initial_angle, self.return_speed, 'lookAt stopped')
         return res
 
     def lookAtRecogCallback(self, msg: Detection3DArray) -> None:
@@ -603,6 +614,7 @@ class NeckController(Node):
 
     def startPointMode(self, mode, initial_angle, frame, limits) -> None:
         self.stopMode()
+        self.syncSetpoint()
         self.mode_initial_angle = list(initial_angle) if len(initial_angle) == 2 else list(self.initial_angle)
         self.point_frame = frame
         self.point_limits = limits
@@ -627,7 +639,7 @@ class NeckController(Node):
 
     def stopPointMode(self, mode, name) -> None:
         if self.mode == mode:
-            self.startReturn(f'{name} stopped')
+            self.startMove(self.mode_initial_angle, self.return_speed, f'{name} stopped')
 
     def lookAtPlaceStart(self, req: LookAtPlace3D.Request, res: LookAtPlace3D.Response):
         """
@@ -729,9 +741,14 @@ class NeckController(Node):
     def controlLoop(self) -> None:
         if self.mode is None:
             return
+        if self.pause:
+            # the motors do not get goals: drop the setpoint so the pursuit restarts from the
+            # measured position instead of jumping to where the setpoint went meanwhile
+            self.setpoint = None
+            return
         try:
-            if self.mode == 'return':
-                self.returnStep()
+            if self.mode == 'move':
+                self.moveStep()
                 return
             if self.mode == 'lookat':
                 self.processPending()
@@ -745,7 +762,7 @@ class NeckController(Node):
                 self.processPendingPoints()
             if self.target is None or self.now() > self.point_deadline:
                 if self.mode == 'place':
-                    self.startReturn('lookAtPlace timed out')
+                    self.startMove(self.mode_initial_angle, self.return_speed, 'lookAtPlace timed out')
                 else:
                     self.returnHome('lookAtTarget: no points, returning to the initial angle.')
                 return
@@ -753,28 +770,39 @@ class NeckController(Node):
         except Exception as e:
             self.get_logger().error(f'Neck control loop: {e}', throttle_duration_sec=2.0)
 
-    def startReturn(self, reason) -> None:
-        """
-        @brief Ends the active look-at mode and brings the neck back to its initial angle with the
-               same smooth pursuit (lookat.return_speed_deg), instead of one direct goal: a direct
-               goal runs with the motor profile (fast, strong acceleration) and looks abrupt.
-               updateNeck / updateNeckByPoint / a new start interrupt it.
-        """
-        self.stopMode()
-        self.mode = 'return'
-        self.correcting = True          # go all the way to stop_threshold, even from a few degrees away
-        self.get_logger().info(f'{reason}, returning smoothly to the initial angle.')
+    def syncSetpoint(self) -> None:
+        """@brief Restarts the pursuit from the measured position when the neck is at rest."""
+        if self.mode is None and self.state_ok:
+            self.setpoint = np.array(self.measuredCommand())
+            self.setpoint_vel = np.zeros(2)
 
-    def returnStep(self) -> None:
-        target = self.clampCommand(self.mode_initial_angle)
-        self.track(target, max_speed=self.return_speed)
+    def startMove(self, angles, speed, reason=None) -> None:
+        """
+        @brief Moves the neck to a fixed angle with the smooth pursuit (speed in deg/s,
+               move.accel_deg) instead of one direct goal: a direct goal runs with the motor
+               profile (fast, strong acceleration) and looks abrupt. Used by updateNeck,
+               updateNeckByPoint and at the end of every look-at mode. A new move while one is
+               running only changes its goal (the velocity carries over); a look-at start ends it.
+        """
+        if self.mode != 'move':
+            self.stopMode()
+            self.syncSetpoint()
+            self.mode = 'move'
+        self.move_target = self.clampCommand(angles)
+        self.move_speed = speed
+        self.correcting = True          # go all the way to stop_threshold, even from a few degrees away
+        if reason:
+            self.get_logger().info(f'{reason}, returning smoothly to the initial angle.')
+
+    def moveStep(self) -> None:
+        target = self.move_target
+        self.track(target, max_speed=self.move_speed, max_accel=self.move_accel, braking=True)
         if self.setpoint is None or not self.state_ok:
             return
         if (not self.correcting and np.max(np.abs(self.setpoint_vel)) < 1e-3) or \
                 np.max(np.abs(np.array(target) - self.setpoint)) < 0.05:
             self.stopMode()
             self.sendGoal(target, force_head=True)      # last < stop_threshold, and the animatronic head
-            self.get_logger().info('Neck back at the initial angle.')
 
     def returnHome(self, message) -> None:
         """@brief Slow pursuit back to the initial angle (not a direct jump); the mode stays active."""
@@ -782,7 +810,7 @@ class NeckController(Node):
             self.get_logger().info(message)
             self.returned_home = True
             self.target = None
-        self.track(self.clampCommand(self.mode_initial_angle), max_speed=self.return_speed)
+        self.track(self.clampCommand(self.mode_initial_angle), max_speed=self.return_speed, max_accel=self.move_accel)
 
     def pursueTarget(self, frame, max_speed=None, max_accel=None) -> None:
         """
@@ -799,13 +827,15 @@ class NeckController(Node):
         if desired is not None:
             self.track(self.clampCommand(desired), max_speed=max_speed, max_accel=max_accel)
 
-    def track(self, desired, max_speed=None, max_accel=None) -> None:
+    def track(self, desired, max_speed=None, max_accel=None, braking=False) -> None:
         """
         @brief Smooth pursuit. A setpoint moves towards the desired angles with a proportional
                velocity (lookat.gain) limited by lookat.max_speed_deg / max_accel_deg and is sent
                every cycle, so the motors get a ramp instead of steps. Hysteresis: the pursuit
                starts when the target is start_threshold away and ends within stop_threshold;
-               outside the pursuit the velocity ramps down to zero.
+               outside the pursuit the velocity ramps down to zero. braking (fixed goals): the
+               speed is also limited to sqrt(2 * accel * error), so the neck brakes at max_accel
+               and stops at the goal instead of crawling the last degrees (gain only: ~1 s more).
         """
         if not self.state_ok:
             return
@@ -822,8 +852,14 @@ class NeckController(Node):
             self.correcting = False
 
         speed = self.max_speed if max_speed is None else max_speed
-        target_vel = np.clip(self.gain * error, -speed, speed) if self.correcting else np.zeros(2)
-        max_dv = (self.max_accel if max_accel is None else max_accel) * dt
+        accel = self.max_accel if max_accel is None else max_accel
+        if not self.correcting:
+            target_vel = np.zeros(2)
+        elif braking:
+            target_vel = np.sign(error) * np.minimum(speed, np.sqrt(2.0 * accel * np.abs(error)))
+        else:
+            target_vel = np.clip(self.gain * error, -speed, speed)
+        max_dv = accel * dt
         self.setpoint_vel += np.clip(target_vel - self.setpoint_vel, -max_dv, max_dv)
         if not self.correcting and np.max(np.abs(self.setpoint_vel)) < 1e-3:
             return
