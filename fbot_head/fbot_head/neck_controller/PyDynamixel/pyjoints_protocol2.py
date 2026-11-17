@@ -13,6 +13,7 @@ ADDR_MX_PRESENT_POSITION = 132
 ADDR_MX_PRESENT_VELOCITY = 128 
 ADDR_MX_GOAL_POSITION = 116 
 ADDR_PROFILE_VELOCITY = 112
+ADDR_PROFILE_ACCELERATION = 108
 # MAXADDR_MX_TORQUE_ENABLE = 0x0E # Address for maximum torque
 # MAXTORQUELIMIT = 767 # Maximum torque possible
 
@@ -100,6 +101,67 @@ class DxlCommProtocol2(object):
         SW.clearParam() #clears buffer
 
 
+    def syncReadStates(self, joints):
+
+        ''' Reads present velocity and position of the given joints
+        with one sync read packet (addresses 128..135).
+        Returns {servo_id: (angle_rad, velocity_rad_s)} for the joints
+        that answered; joints that did not answer are left out.
+        '''
+
+        reader = dxl.GroupSyncRead(self.socket, self.pack_handler, ADDR_MX_PRESENT_VELOCITY, 8)
+        for joint in joints:
+            reader.addParam(joint.servo_id)
+        reader.txRxPacket()
+        states = {}
+        for joint in joints:
+            if not reader.isAvailable(joint.servo_id, ADDR_MX_PRESENT_VELOCITY, 8):
+                continue
+            raw_vel = reader.getData(joint.servo_id, ADDR_MX_PRESENT_VELOCITY, 4)
+            raw_pos = reader.getData(joint.servo_id, ADDR_MX_PRESENT_POSITION, 4)
+            if raw_vel >= 2**31:
+                raw_vel -= 2**32
+            if raw_pos >= 2**31:
+                raw_pos -= 2**32
+            joint.currValue = raw_pos - joint.centerValue
+            joint.currAngle = pi * float(joint.currValue) / 2048.0
+            # 0.229 rpm per unit (XL430/XM430), rpm -> rad/s
+            joint.currVelocity = raw_vel * 0.229 * 0.1047198
+            states[joint.servo_id] = (joint.currAngle, joint.currVelocity)
+        return states
+
+    def syncWriteGoalAngles(self, joint_angles):
+
+        ''' Sends the goal angle of several joints in one sync write
+        packet (no status packets to wait for).
+        joint_angles: list of (JointProtocol2, angle_rad).
+        '''
+
+        values = []
+        for joint, angle in joint_angles:
+            joint.setGoalAngle(angle)
+            values.append((joint, joint.goalValue))
+        self.syncWrite4(ADDR_MX_GOAL_POSITION, values)
+
+    def syncWriteProfileVelocities(self, joint_values):
+
+        ''' Profile velocity (0.229 rpm per unit, 0 = no limit) of several
+        joints in one sync write packet. joint_values: list of (JointProtocol2, units).
+        '''
+
+        self.syncWrite4(ADDR_PROFILE_VELOCITY, joint_values)
+
+    def syncWrite4(self, address, joint_values):
+
+        ''' Writes a 4 byte value to several joints in one sync write packet. '''
+
+        writer = dxl.GroupSyncWrite(self.socket, self.pack_handler, address, 4)
+        for joint, value in joint_values:
+            value = int(value) & 0xFFFFFFFF
+            writer.addParam(joint.servo_id, [dxl.DXL_LOBYTE(dxl.DXL_LOWORD(value)), dxl.DXL_HIBYTE(dxl.DXL_LOWORD(value)),
+                                             dxl.DXL_LOBYTE(dxl.DXL_HIWORD(value)), dxl.DXL_HIBYTE(dxl.DXL_HIWORD(value))])
+        writer.txPacket()
+
     def enableTorques(self):
 
         ''' Enable torque for all motors connected
@@ -152,7 +214,13 @@ class JointProtocol2(object):
         self.changed = False
 
     def setVelocityLimit(self, limit=40):
+        ''' Profile velocity (0.229 rpm per unit, 0 = no limit). '''
         self.pack_handler.write4ByteTxRx(self.socket, self.servo_id, ADDR_PROFILE_VELOCITY, limit)
+
+    def setProfileAcceleration(self, acceleration=0):
+        ''' Profile acceleration (214.577 rev/min^2 per unit, 0 = no limit).
+        With a velocity limit this gives trapezoidal moves instead of jerks. '''
+        self.pack_handler.write4ByteTxRx(self.socket, self.servo_id, ADDR_PROFILE_ACCELERATION, acceleration)
     
     def setCenterValue(self, centerValue):
 
