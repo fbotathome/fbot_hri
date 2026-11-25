@@ -69,6 +69,7 @@ class RivaRecognizerGpsrNode(Node):
         self.declare_parameter('riva.url', 'localhost:50051')
         self.declare_parameter('stt_mic_timeout', 25)
         self.declare_parameter('stt_silence_timeout', 4.0)
+        self.declare_parameter('stt_start_timeout', 5.0)
         self.declare_parameter('stt_configs.start_history', 50)
         self.declare_parameter('stt_configs.start_threshold', -1)
         self.declare_parameter('stt_configs.stop_history', 3500)
@@ -84,6 +85,7 @@ class RivaRecognizerGpsrNode(Node):
         self.recognizer_service_param = self.get_parameter('services.asr_recognizer.service').get_parameter_value().string_value
         self.stt_mic_timeout = self.get_parameter('stt_mic_timeout').get_parameter_value().integer_value
         self.stt_silence_timeout = self.get_parameter('stt_silence_timeout').get_parameter_value().double_value
+        self.stt_start_timeout = self.get_parameter('stt_start_timeout').get_parameter_value().double_value
         self.start_history = self.get_parameter('stt_configs.start_history').get_parameter_value().integer_value
         self.start_threshold = self.get_parameter('stt_configs.start_threshold').get_parameter_value().integer_value
         self.stop_history = self.get_parameter('stt_configs.stop_history').get_parameter_value().integer_value
@@ -131,6 +133,7 @@ class RivaRecognizerGpsrNode(Node):
         segment concatenated, so multiple commands spoken in one breath (with
         pauses shorter than stt_silence_timeout between them) are all captured.
         The last segment is kept even if it was not finalized before the stop.
+        Before any speech it waits stt_start_timeout seconds instead of stt_silence_timeout.
         """
         config_service = deepcopy(self.config)
 
@@ -179,7 +182,7 @@ class RivaRecognizerGpsrNode(Node):
                         last_partial = ""
                     self._stop_yielding = True
                     stop_requested = True
-                elif now - last_change >= silence_limit:
+                elif now - last_change >= (silence_limit if segments or last_partial else self.stt_start_timeout):
                     self.get_logger().info("[GPSR ASR] end of speech (silence)")
                     if last_partial:
                         segments.append(last_partial)

@@ -2,6 +2,7 @@ riva_recognizer_gpsr_node:
   ros__parameters:
     stt_mic_timeout: 25
     stt_silence_timeout: 4.0
+    stt_start_timeout: 5.0
     riva.url: jetson:50051
     stt_configs:
       start_history: 50
